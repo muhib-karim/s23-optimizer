@@ -31,3 +31,4 @@ Implement the approved Agent Mode plan with fixture-first tests, confirmed journ
 - 2026-10-17 22:35Z Codex: reviewed architecture and test contract; next: fixtures and tests.
 - 2026-10-17 22:37Z Codex: implemented Agent Mode, shared fixtures/tests, MCP companion, docs and CI; 18 Node tests pass, JVM/build and device smoke tests remain for CI/device; no commits or pushes.
 - 2026-10-17 22:40Z: Codex pass 1 (agent mode build) done: power parsers + fixtures, typed agent tools, proposal-only model clients, Agent tab, journal/undo integration, MCP companion server (18 Node tests pass). Gradle not run locally; CI to confirm. Not yet tested on a real phone.
+- 2026-10-17 22:53Z: CI green on PR #1; release.yml now accepts pre-release tags (non-latest); v2.0.0-alpha1 pre-release published with signed APK. Device test still pending.
