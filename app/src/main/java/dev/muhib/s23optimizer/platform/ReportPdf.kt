@@ -81,3 +81,6 @@ object ReportPdf {
         }
     }
 }
+
+private inline fun <R> PdfDocument.use(block: (PdfDocument) -> R): R =
+    try { block(this) } finally { close() }

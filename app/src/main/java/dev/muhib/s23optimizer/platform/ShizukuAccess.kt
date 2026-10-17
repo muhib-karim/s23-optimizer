@@ -66,7 +66,8 @@ class ShizukuShell(private val access: ShizukuAccess) : ShellRunner {
         var process: java.lang.Process? = null
         try {
             // Direct argv; no interpolating shell, pipelines or arbitrary user commands.
-            process = Shizuku.newProcess(command.args.toTypedArray(), null, null)
+            // Shizuku 13 made newProcess private; call it reflectively (same argv, no shell).
+            process = shizukuNewProcess(command.args.toTypedArray())
             val child = requireNotNull(process)
             child.outputStream.close()
             withTimeout(12_000) {
@@ -95,3 +96,12 @@ class ShizukuShell(private val access: ShizukuAccess) : ShellRunner {
         finally { runCatching { process?.destroy() } }
     }
 }
+
+private val newProcessMethod by lazy {
+    Shizuku::class.java.getDeclaredMethod(
+        "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
+    ).apply { isAccessible = true }
+}
+
+private fun shizukuNewProcess(argv: Array<String>): java.lang.Process =
+    newProcessMethod.invoke(null, argv, null, null) as java.lang.Process
