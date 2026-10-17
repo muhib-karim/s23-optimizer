@@ -18,8 +18,8 @@ android {
         applicationId = "dev.muhib.s23optimizer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = System.getenv("RELEASE_VERSION") ?: "1.0.0"
+        versionCode = 2
+        versionName = System.getenv("RELEASE_VERSION") ?: "2.0.0-alpha1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -66,6 +66,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     testImplementation("junit:junit:4.13.2")

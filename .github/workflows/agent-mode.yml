@@ -1,0 +1,61 @@
+name: Agent Mode checks
+
+on:
+  push:
+    branches: [agent-mode]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-mode-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  companion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Shared-fixture parser and MCP tests
+        run: node --test mcp/
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Android 35 SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: JVM unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+      - name: Debug APK
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Agent-Mode-JVM-test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: S23-Optimizer-2.0.0-alpha1-debug
+          path: app/build/outputs/apk/debug/app-debug.apk

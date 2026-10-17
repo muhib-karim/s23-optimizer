@@ -41,7 +41,7 @@ data class AuditSnapshot(
     val notes: List<String> = emptyList()
 )
 
-enum class ChangeKind { DISABLE, APP_OP, STANDBY, ANIMATION }
+enum class ChangeKind { DISABLE, APP_OP, STANDBY, ANIMATION, FORCE_STOP }
 enum class JournalStatus { PREPARED, APPLIED, FAILED, NEEDS_REVIEW, UNDONE, UNDO_FAILED }
 
 data class JournalEntry(

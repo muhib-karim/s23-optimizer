@@ -1,0 +1,15 @@
+Current Battery Service state:
+  AC powered: false
+  USB powered: false
+  Wireless powered: false
+  Max charging current: 0
+  Charge counter: 3650000
+  status: 3
+  health: 2
+  present: true
+  level: 73
+  scale: 100
+  voltage: 4012
+  temperature: 324
+  technology: Li-ion
+  mSavedBatteryAsoc: 98

@@ -13,6 +13,7 @@ object Commands {
             ChangeKind.STANDBY -> listOf("am", "get-standby-bucket", "--user", "0", value)
             ChangeKind.DISABLE -> listOf("dumpsys", "package", value)
             ChangeKind.ANIMATION -> listOf("settings", "get", "global", value)
+            ChangeKind.FORCE_STOP -> error("Force-stop has no reversible value to read.")
         })
     }
     fun parse(kind: ChangeKind, result: ShellResult): String? {
@@ -22,6 +23,7 @@ object Commands {
             ChangeKind.STANDBY -> ShellParsers.bucket(result.stdout)
             ChangeKind.DISABLE -> ShellParsers.enabled(result.stdout)
             ChangeKind.ANIMATION -> ShellParsers.animation(result.stdout)
+            ChangeKind.FORCE_STOP -> null
         }
     }
     fun apply(kind: ChangeKind, value: String, expected: String): ShellCommand {
@@ -31,6 +33,7 @@ object Commands {
             ChangeKind.STANDBY -> { require(expected in listOf("40", "45")); listOf("am", "set-standby-bucket", "--user", "0", value, if (expected == "45") "restricted" else "rare") }
             ChangeKind.DISABLE -> { require(value in BloatAllowlist.entries && expected == "3"); listOf("pm", "disable-user", "--user", "0", value) }
             ChangeKind.ANIMATION -> { require(expected == "0.5"); listOf("settings", "put", "global", value, "0.5") }
+            ChangeKind.FORCE_STOP -> { require(expected == "stopped"); listOf("am", "force-stop", "--user", "0", value) }
         })
     }
     fun undo(entry: JournalEntry): List<ShellCommand> {
@@ -48,6 +51,7 @@ object Commands {
                 require(ShellParsers.animation(before) != null)
                 listOf(if (before == "null") listOf("settings", "delete", "global", value) else listOf("settings", "put", "global", value, before))
             }
+            ChangeKind.FORCE_STOP -> emptyList()
         }
         return commands.map(::ShellCommand)
     }

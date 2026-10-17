@@ -1,0 +1,11 @@
+AGGREGATED OVER LAST 3 HOURS:
+  * org.example.sync / u0a123 / v42:
+           TOTAL: 80% (100MB-180MB-240MB/70MB-100MB-160MB/0.00-0.00-0.00 over 20)
+              Bg: 65% (80MB-140MB-200MB/60MB-90MB-110MB/0.00-0.00-0.00 over 12)
+  * org.example.music:player / u0a124 / v7:
+           TOTAL: 20% (20MB-40MB-80MB/10MB-20MB-40MB/0.00-0.00-0.00 over 5)
+          Cached: 10% (10MB-24MB-32MB/8MB-12MB-20MB/0.00-0.00-0.00 over 3)
+  * org.example.empty / u0a125 / v1:
+           TOTAL: No data
+Run time Stats:
+  Total elapsed time: +3h0m0s0ms

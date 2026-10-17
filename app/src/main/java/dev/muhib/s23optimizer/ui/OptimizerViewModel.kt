@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.muhib.s23optimizer.OptimizerApplication
 import dev.muhib.s23optimizer.core.*
+import dev.muhib.s23optimizer.core.agent.*
 import dev.muhib.s23optimizer.platform.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -25,6 +26,14 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
     val daily = MutableStateFlow(graph.preferences.getBoolean("daily_audit", false))
     val share = MutableSharedFlow<Uri>(extraBufferCapacity = 1)
     private var exportPair: Pair<AuditSnapshot, AuditSnapshot>? = null
+    val agentAnalysis = MutableStateFlow<AgentAnalysis?>(null)
+    val agentProgress = MutableStateFlow("")
+    val agentBefore = MutableStateFlow<AgentSnapshot?>(null)
+    val agentAfter = MutableStateFlow<AgentSnapshot?>(null)
+    val agentDecisions = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val agentConfig = MutableStateFlow(graph.agentSettings.config())
+    val agentHasKey = MutableStateFlow(graph.agentSettings.hasKey())
+    private var reviewedProposal: Int? = null
 
     private fun task(block: suspend () -> Unit) {
         if (busy.value) return
@@ -45,11 +54,13 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         message.value = "$role snapshot saved. Unreadable fields are marked unavailable."
     }
     fun prepare(kind: ChangeKind, target: String, expected: String, allowlistOptIn: Boolean = false) = task {
+        reviewedProposal = null
         review.value = emptyList()
         if (kind == ChangeKind.DISABLE) require(allowlistOptIn) { "Explicit allowlist opt-in is required." }
         review.value = listOf(graph.engine.prepare(kind, target, expected).getOrThrow())
     }
     fun prepareAnimations() = task {
+        reviewedProposal = null
         review.value = emptyList()
         val plans = mutableListOf<ReviewedChange>()
         for (key in Commands.animationKeys) {
@@ -64,16 +75,20 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         val plans = review.value.toList()
         require(plans.isNotEmpty()) { "No reviewed commands." }
         review.value = emptyList()
+        val proposalIndex = reviewedProposal
+        reviewedProposal = null
         var applied = 0
         for (plan in plans) {
             val row = graph.engine.apply(plan).getOrThrow()
+            if (proposalIndex != null) agentDecisions.value = agentDecisions.value + (proposalIndex to if (row.status == JournalStatus.APPLIED) "Applied · see History" else "${row.status} · see History")
             if (row.status != JournalStatus.APPLIED) {
                 message.value = "${row.status}: ${row.detail}. $applied earlier change(s) verified. Review History / Undo."
                 return@task
             }
             applied++
         }
-        message.value = "$applied change(s) applied and verified. Undo is in History. Take AFTER measurements later under comparable conditions."
+        message.value = if (plans.any { !it.revertible }) "Force-stop command accepted. It cannot be undone; open the app yourself when needed. See History for the record."
+            else "$applied change(s) applied and verified. Undo is in History. Take AFTER measurements later under comparable conditions."
     }
     fun undo(id: Long) = task {
         val row = graph.engine.undo(id).getOrThrow()
@@ -126,4 +141,53 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun finishOnboarding() { graph.preferences.edit().putBoolean("onboarded", true).apply() }
     fun open(link: SettingsLink) { SettingsLinks.launch(graph.app, link)?.let { message.value = it } }
+
+    fun analyzeAgent() = task {
+        require(graph.access.state.value.ready) { "Start Shizuku and grant permission first." }
+        val client = withContext(Dispatchers.IO) { graph.agentSettings.client() }
+        review.value = emptyList(); reviewedProposal = null
+        agentAnalysis.value = null; agentAfter.value = null; agentDecisions.value = emptyMap()
+        agentProgress.value = "Loading installed apps…"
+        try {
+            val apps = graph.inventory.load().apps
+            val snapshot = graph.agentReads.collect(apps) { agentProgress.value = it }
+            agentBefore.value = snapshot
+            agentProgress.value = "Asking the model to explain measurements and propose actions…"
+            agentAnalysis.value = AgentLoop(ToolRegistry(apps.map { it.packageName }.toSet()), client).analyze(snapshot)
+        } finally { agentProgress.value = "" }
+    }
+
+    fun prepareAgent(index: Int) = task {
+        require(index !in agentDecisions.value) { "This proposal has already been handled." }
+        review.value = emptyList(); reviewedProposal = null
+        val proposal = requireNotNull(agentAnalysis.value?.proposals?.getOrNull(index)) { "Analyze again before reviewing a proposal." }
+        val registry = ToolRegistry(graph.inventory.load().apps.map { it.packageName }.toSet())
+        val action = registry.validateWrite(proposal.action.tool, proposal.action.arguments())
+        review.value = listOf(graph.engine.prepare(action.kind, action.pkg, action.expected).getOrThrow())
+        reviewedProposal = index
+    }
+
+    fun skipAgent(index: Int) {
+        if (!busy.value && index !in agentDecisions.value) agentDecisions.value = agentDecisions.value + (index to "Skipped")
+    }
+
+    fun remeasureAgent() = task {
+        requireNotNull(agentBefore.value) { "Analyze first to establish a baseline." }
+        require(graph.access.state.value.ready) { "Start Shizuku and grant permission first." }
+        try {
+            agentAfter.value = graph.agentReads.collect(graph.inventory.load().apps) { agentProgress.value = it }
+        } finally { agentProgress.value = "" }
+    }
+
+    fun saveAgentSettings(config: ModelConfig, newKey: String) = task {
+        withContext(Dispatchers.IO) { graph.agentSettings.save(config, newKey) }
+        agentConfig.value = graph.agentSettings.config(); agentHasKey.value = graph.agentSettings.hasKey()
+        message.value = "Agent settings saved. API key encrypted with Android Keystore."
+    }
+
+    fun forgetAgentKey() = task {
+        withContext(Dispatchers.IO) { graph.agentSettings.clearKey() }
+        agentHasKey.value = false
+        message.value = "Saved API key removed."
+    }
 }

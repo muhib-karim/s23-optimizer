@@ -6,7 +6,7 @@ import kotlinx.coroutines.sync.withLock
 
 enum class UndoDecision { RESTORE, ALREADY_RESTORED, CONFLICT, UNAVAILABLE }
 object UndoPlanner {
-    fun pending(entries: List<JournalEntry>): List<JournalEntry> = entries.filter { it.status != JournalStatus.UNDONE }
+    fun pending(entries: List<JournalEntry>): List<JournalEntry> = entries.filter { it.status != JournalStatus.UNDONE && it.kind != ChangeKind.FORCE_STOP }
         .sortedWith(compareByDescending<JournalEntry> { it.createdAt }.thenByDescending { it.id })
     fun decide(entry: JournalEntry, current: String?): UndoDecision = when (current) {
         null -> UndoDecision.UNAVAILABLE
@@ -19,6 +19,7 @@ object UndoPlanner {
 }
 
 data class ReviewedChange(val kind: ChangeKind, val target: String, val before: String, val expected: String) {
+    val revertible: Boolean get() = kind != ChangeKind.FORCE_STOP
     val command: ShellCommand get() = Commands.apply(kind, target, expected)
     val undoCommands: List<ShellCommand> get() = Commands.undo(JournalEntry(kind = kind, target = target, before = before, expected = expected))
 }
@@ -37,6 +38,7 @@ class ChangeEngine(
         val eligible = policy(kind, target)
         require(eligible.allowed) { eligible.reasons.joinToString(" ") }
         Commands.apply(kind, target, expected)
+        if (kind == ChangeKind.FORCE_STOP) return@safely ReviewedChange(kind, target, "non-revertible", expected)
         val before = Commands.parse(kind, shell.run(Commands.read(kind, target)))
         requireNotNull(before) { "Prior value is unavailable; no change permitted." }
         require(before != expected) { "Already at the requested value." }
@@ -47,14 +49,26 @@ class ChangeEngine(
     suspend fun apply(plan: ReviewedChange): Result<JournalEntry> = safely { mutex.withLock {
         val eligible = policy(plan.kind, plan.target)
         require(eligible.allowed) { eligible.reasons.joinToString(" ") }
-        val prior = Commands.parse(plan.kind, shell.run(Commands.read(plan.kind, plan.target)))
-        require(prior == plan.before) { "State changed since review; refresh the recommendation." }
-        val row = JournalEntry(kind = plan.kind, target = plan.target, before = plan.before, expected = plan.expected)
+        plan.command // Validate even a caller-constructed plan before journaling.
+        if (plan.revertible) {
+            val prior = Commands.parse(plan.kind, shell.run(Commands.read(plan.kind, plan.target)))
+            require(prior == plan.before) { "State changed since review; refresh the recommendation." }
+        } else require(plan.before == "non-revertible")
+        val row = JournalEntry(kind = plan.kind, target = plan.target, before = plan.before, expected = plan.expected,
+            detail = if (plan.revertible) "Prepared; the command may not have run. Undo can inspect and recover."
+                else "Prepared force-stop; the command may not have run. Cannot undo; inspect current state if interrupted.")
         Commands.undo(row) // Validate the entire reverse plan before durable insertion or mutation.
         val saved = row.copy(id = journal.insert(row))
         // If the process dies after this line, PREPARED is retained for recovery.
         try {
             val output = shell.run(plan.command)
+            if (!plan.revertible) {
+                return@withLock saved.copy(
+                    status = if (output.success) JournalStatus.APPLIED else JournalStatus.NEEDS_REVIEW,
+                    completedAt = System.currentTimeMillis(),
+                    detail = "Force-stop ${if (output.success) "command accepted" else "outcome uncertain (exit ${output.exitCode})"}. Non-revertible; no prior process state can be restored. Open the app yourself when needed."
+                ).also { journal.update(it) }
+            }
             val verified = Commands.parse(plan.kind, shell.run(Commands.read(plan.kind, plan.target)))
             val status = when {
                 output.success && verified == plan.expected -> JournalStatus.APPLIED
@@ -66,7 +80,8 @@ class ChangeEngine(
                 .also { journal.update(it) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
-            saved.copy(status = JournalStatus.NEEDS_REVIEW, detail = "Interrupted: ${e.message}. Inspect or undo; state is uncertain.")
+            saved.copy(status = JournalStatus.NEEDS_REVIEW, detail = if (plan.revertible) "Interrupted: ${e.message}. Inspect or undo; state is uncertain."
+                else "Interrupted force-stop; state is uncertain. Cannot undo. Inspect current state before deciding what to do next.")
                 .also { journal.update(it) }
         }
     } }
@@ -74,6 +89,7 @@ class ChangeEngine(
     suspend fun undo(id: Long): Result<JournalEntry> = safely { mutex.withLock { undoLocked(id) } }
     private suspend fun undoLocked(id: Long): JournalEntry {
         val entry = journal.entries().first { it.id == id }
+        require(entry.kind != ChangeKind.FORCE_STOP) { "Force-stop is non-revertible. Open the app yourself when needed." }
         if (entry.status == JournalStatus.UNDONE) return entry
         try {
             val current = Commands.parse(entry.kind, shell.run(Commands.read(entry.kind, entry.target)))

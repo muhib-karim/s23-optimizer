@@ -3,6 +3,7 @@ package dev.muhib.s23optimizer
 import android.app.Application
 import androidx.room.Room
 import dev.muhib.s23optimizer.core.*
+import dev.muhib.s23optimizer.core.agent.AgentReadTools
 import dev.muhib.s23optimizer.data.*
 import dev.muhib.s23optimizer.platform.*
 
@@ -19,6 +20,8 @@ class AppGraph(val app: Application) {
     val inventory = AppInventory(app)
     val audit = AuditCollector(app, access, shell, inventory)
     val preferences = app.getSharedPreferences("preferences", Application.MODE_PRIVATE)
+    val agentSettings = AgentSettings(app)
+    val agentReads = AgentReadTools(shell)
     val engine = ChangeEngine(shell, journal) { kind, target ->
         if (kind == ChangeKind.ANIMATION) EligibilityResult(true, emptyList())
         else {

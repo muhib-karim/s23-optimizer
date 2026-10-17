@@ -1,0 +1,29 @@
+Battery History (0% used, 4096 used of 256KB, 12 strings using 800):
+Statistics since last charge:
+  System starts: 1, currently on battery: true
+  Start clock time: 2026-10-17-08-00-00
+  Time on battery: 3h 12m 5s 120ms (100.0%) realtime, 1h 12m uptime
+  Screen on: 42m 10s 500ms (21.9%) 12x, Interactive: 43m
+  Discharge: 310 mAh
+  Discharge screen off: 210 mAh
+  Discharge screen on: 100 mAh
+  Amount discharged while screen on: 3
+  Amount discharged while screen off: 5
+  Estimated power use (mAh):
+    Capacity: 5000, Computed drain: 310, actual drain: 300-350
+    Uid u0a123: 123.45 ( cpu=80.2 wakelock=20.5 )
+    Uid 10124: 24.5 ( cpu=10.0 )
+    Uid u10a125: 1.25 ( cpu=1.0 )
+    Uid 1000: 6.8 ( cpu=5.0 )
+  u0a123:
+    Wake lock *job*/org.example.sync/.Upload: 1h 2m 3s 4ms partial (12 times) realtime
+    Wake lock SyncLoop: 900ms partial (2 times) realtime
+    Wake lock display: 1m full (2 times) realtime
+    Wakeup alarm *walarm*:org.example.sync.RETRY: 14 times
+    Job org.example.sync/.Upload: 2m 10s realtime (6 times)
+  u0a124:
+    Wake lock AudioMix: 5s 100ms partial (1 times) realtime
+    Wakeup alarm org.example.music.TIMER: 2 times
+    Job org.example.music/.Refresh: 200ms realtime (1 times)
+  u10a125:
+    Wake lock WorkProfile: 1s partial (1 times) realtime
