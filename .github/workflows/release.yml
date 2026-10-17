@@ -80,7 +80,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.sha256 --verify-tag --title "S23 Optimizer $GITHUB_REF_NAME" --generate-notes
+          extra=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then extra=(--prerelease --latest=false); fi
+          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.sha256 --verify-tag --title "S23 Optimizer $GITHUB_REF_NAME" --generate-notes "${extra[@]}"
       - name: Remove temporary signing material
         if: always()
         shell: bash
