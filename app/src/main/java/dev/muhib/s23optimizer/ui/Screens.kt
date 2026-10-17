@@ -26,7 +26,7 @@ import java.util.Date
 import java.util.Locale
 
 private enum class Screen(val title: String) {
-    ONBOARDING("Get started"), DASHBOARD("Dashboard"), AUDIT("Audit details"), OPTIMISE("Optimise"),
+    ONBOARDING("Get started"), DASHBOARD("Dashboard"), AUDIT("Audit details"), OPTIMISE("Optimise"), AGENT("Agent"),
     SETTINGS("Samsung settings"), HISTORY("History / Undo"), REPORT("Before / After"), ABOUT("About / limits")
 }
 private fun date(ms: Long) = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
@@ -53,7 +53,7 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
             actions = { if (screen != Screen.DASHBOARD) TextButton(onClick = { go(Screen.DASHBOARD) }) { Text("Home") } }) },
         bottomBar = {
             NavigationBar {
-                listOf(Screen.DASHBOARD to "◉", Screen.OPTIMISE to "◇", Screen.HISTORY to "↶", Screen.SETTINGS to "⚙").forEach { (item, icon) ->
+                listOf(Screen.DASHBOARD to "◉", Screen.OPTIMISE to "◇", Screen.AGENT to "◎", Screen.HISTORY to "↶", Screen.SETTINGS to "⚙").forEach { (item, icon) ->
                     NavigationBarItem(selected = screen == item, onClick = { go(item) }, icon = { Text(icon) }, label = { Text(when (item) { Screen.SETTINGS -> "Settings"; Screen.HISTORY -> "History"; else -> item.title }) })
                 }
             }
@@ -74,6 +74,7 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
                 Screen.DASHBOARD -> Dashboard(vm, snapshots.firstOrNull(), busy, access, { go(Screen.AUDIT) }, { go(Screen.REPORT) }, { go(Screen.ONBOARDING) })
                 Screen.AUDIT -> AuditDetails(vm, snapshots.firstOrNull())
                 Screen.OPTIMISE -> Optimise(vm, snapshots.firstOrNull(), busy, access)
+                Screen.AGENT -> AgentScreen(vm) { go(Screen.HISTORY) }
                 Screen.SETTINGS -> SamsungSettings(vm) { go(Screen.ABOUT) }
                 Screen.HISTORY -> History(vm, snapshots, journal, busy) { go(Screen.REPORT) }
                 Screen.REPORT -> Report(vm, snapshots, busy, export)
@@ -122,7 +123,7 @@ private fun Onboarding(vm: OptimizerViewModel, access: ShellAccess, done: () -> 
                 runCatching { context.startActivity(launch) }.onFailure { vm.message.value = "Shizuku manager could not open." }
             }) { Text("Open Shizuku") }
         }
-        Note("Shell mode and the owner profile are required. One UI may deny individual commands even when permission is granted. This app never kills apps, clears app data, or promises battery savings.")
+        Note("Shell mode and the owner profile are required. One UI may deny individual commands even when permission is granted. Agent Mode can propose a separately confirmed force-stop, which cannot be undone. No app data clearing or battery savings are promised.")
         Button(onClick = done, modifier = Modifier.fillMaxWidth()) { Text("Continue to diagnostics") }
     }
 }
@@ -267,13 +268,14 @@ private fun ReviewDialog(vm: OptimizerViewModel, plans: List<ReviewedChange>, bu
         title = { Text("Confirm exact changes") },
         text = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Prior values are readable now and will be checked again. Each record is saved before its mutation; every result is verified. Partial failure may leave earlier changes applied; use History to undo.")
+                Text("Reversible changes recheck the prior value and verify the result. Each record is saved before execution. Force-stop records command acceptance only and cannot be undone. Partial failure may leave earlier changes applied; inspect History.")
                 plans.forEach { plan ->
                     Text(plan.target, fontWeight = FontWeight.SemiBold)
                     Text("Prior: ${plan.before} → Requested: ${plan.expected}")
-                    Note("Read / verify:"); Command(Commands.read(plan.kind, plan.target).display)
+                    if (plan.revertible) { Note("Read / verify:"); Command(Commands.read(plan.kind, plan.target).display) }
                     Note("Apply:"); Command(plan.command.display)
                     Note("Undo:"); plan.undoCommands.forEach { Command(it.display) }
+                    if (!plan.revertible) Text("Cannot undo. Current work and notifications may stop until you reopen the app. No process state can be restored.")
                     if (plan.kind == ChangeKind.DISABLE) Text(requireNotNull(BloatAllowlist.entries[plan.target]))
                 }
                 Text(if (plans.any { it.kind != ChangeKind.ANIMATION }) "Confirm this app is not needed for banking, navigation, alarms, timely notifications, accessibility, VPN, or a connected device. Package-name heuristics cannot identify every sensitive app." else "Shorter animations may feel abrupt. This change does not prove a speed or battery-life gain.")
@@ -295,6 +297,7 @@ private fun SamsungSettings(vm: OptimizerViewModel, about: () -> Unit) {
     val daily by vm.daily.collectAsStateWithLifecycle()
     Page {
         Text("Samsung controls, explained", style = MaterialTheme.typography.headlineMedium)
+        AgentModelSettings(vm)
         Note("Shortcuts are resolved before being offered. One UI varies; follow the manual path if only generic Settings opens. No undocumented refresh-rate keys are written.")
         links.forEach { link ->
             Panel(link.title) {
@@ -323,7 +326,8 @@ private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, jour
                 Text(row.target); Note(date(row.createdAt)); Text("${row.before} → ${row.expected}"); Note(row.detail)
                 Note("Original command:"); Command(Commands.apply(row.kind, row.target, row.expected).display)
                 Note("Restore:"); Commands.undo(row).forEach { Command(it.display) }
-                Button(onClick = { vm.undo(row.id) }, enabled = !busy && row.status != JournalStatus.UNDONE) { Text("Undo / retry this change") }
+                if (row.kind == ChangeKind.FORCE_STOP) Text("Cannot undo force-stop. Open the app yourself when needed.")
+                else Button(onClick = { vm.undo(row.id) }, enabled = !busy && row.status != JournalStatus.UNDONE) { Text("Undo / retry this change") }
             }
         }
         Text("Saved snapshots", style = MaterialTheme.typography.headlineSmall)
@@ -376,7 +380,7 @@ private fun Report(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, busy:
             }
             Button(onClick = export, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Export PDF to Files") }
             OutlinedButton(onClick = vm::shareReport, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Share PDF") }
-            Note("Reports include package names and usage evidence. The share sheet sends the file only to the app you choose. This app has no network permission.")
+            Note("Reports include package names and usage evidence. The share sheet sends the file only to the app you choose. API keys and model settings are never included.")
             OutlinedTextField(value = filter, onValueChange = { filter = it; limit = 30 }, label = { Text("Filter all report metrics") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             val metrics = diff.metrics.filter { it.label.contains(filter, true) || it.id.contains(filter, true) }
             metrics.take(limit).forEach { m ->
@@ -401,7 +405,7 @@ private fun About() {
         Panel("What this app can measure") { Text("Battery signals, storage, memory, thermal state, CPU frequency samples, display modes, animation values and app inventory. Shizuku may expose aggregate per-UID drain estimates, wakelocks, alarms and standby buckets. Usage Access provides foreground time, never exact energy.") }
         Panel("What this app cannot promise") { Text("No guaranteed runtime or speed improvement; no battery capacity health percentage, private app storage totals, generic task killing, force-stop sweep, RAM cleaning, cache deletion or undocumented refresh-rate writes. The condition score reflects three measured conditions only and is not a benchmark.") }
         Panel("Reversible, with practical limits") { Text("Changes are opt-in and journaled before execution. Undo checks live state and preserves conflicts for review. Reinstalling / clearing this app's data removes its journal while OS settings can remain changed. Undo before uninstalling. Android itself may later change standby buckets; the app does not silently fight those changes.") }
-        Panel("Privacy") { Text("No INTERNET permission, analytics or remote service. Snapshots and journal stay in local Room storage; Android backup is disabled. PDF export and sharing are explicit. Reports contain installed packages and usage evidence. Shizuku's pairing is managed by Shizuku and Android.") }
+        Panel("Privacy") { Text("Agent Analyze sends a bounded measurement summary and package names to your chosen HTTPS model provider. No analytics or background model calls. API keys use Android Keystore encryption and are excluded from reports. Snapshots and journal stay in local Room storage; Android backup is disabled. PDF export and sharing are explicit. Reports contain installed packages and usage evidence. Shizuku's pairing is managed by Shizuku and Android.") }
         Note("Apache License 2.0. AndroidX, Kotlin, coroutines and Shizuku are used under their respective open-source licenses. The complete project license and documented allowlist are in the repository.")
     }
 }

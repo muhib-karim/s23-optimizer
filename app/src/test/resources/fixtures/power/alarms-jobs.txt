@@ -1,0 +1,8 @@
+  u0a123:
+    Wakeup alarm *walarm*:FIRST: 4 times
+    Wakeup alarm *walarm*:SECOND: 10 times
+    Job org.example.sync/.First: 1m realtime (3 times)
+    Job org.example.sync/.Second: 10s realtime (5 times)
+  u0a124:
+    Wakeup alarm org.example.music.TIMER: 0 times
+    Job org.example.music/.Unknown: (not used)

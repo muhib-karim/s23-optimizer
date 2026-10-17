@@ -1,0 +1,4 @@
+org.example.sync: 40
+org.example.music: bucket=20
+org.example.reader: restricted
+org.example.unknown: bucket=999

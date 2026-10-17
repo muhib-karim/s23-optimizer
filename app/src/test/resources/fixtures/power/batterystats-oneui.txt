@@ -1,0 +1,18 @@
+Statistics since last charge:
+  Start clock time: 2026-10-17-09-30-00
+  Time on battery: 1h 0m 0s 0ms (100%) realtime, 40m uptime
+  Discharge screen off: 12.5 mAh
+  Amount discharged while screen on: 2
+  Estimated power use (mAh):
+    Uid u0a123: 4.2e1 ( cpu=25 )
+    Uid u0a124: NaN
+    Uid u999999999999999999999a123: 5.0
+  u0a123:
+    Wake lock *alarm*: 2m 3s partial (7 times) max=20s actual=2m realtime
+    Wakeup alarm *walarm*:RETRY: 7 times
+    Job org.example.sync/.Upload: 1s 500ms realtime (3 times), 0 background
+  u0a124:
+    Wake lock Overflow: 999999999999999999999h partial (99 times) realtime
+    Job invalid: unknown
+  Kernel Wakelocks:
+    Wake lock kernel: 99h partial (100 times)

@@ -1,0 +1,2 @@
+Uid mode: RUN_ANY_IN_BACKGROUND: allow
+RUN_ANY_IN_BACKGROUND: ignore; time=+2h13m20s ago; rejectTime=+1h ago
