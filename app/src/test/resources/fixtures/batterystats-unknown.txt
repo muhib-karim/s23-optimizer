@@ -1,0 +1,4 @@
+Statistics since last charge:
+  Some future vendor format which is not documented.
+  u0a123:
+    Wake lock example: unavailable

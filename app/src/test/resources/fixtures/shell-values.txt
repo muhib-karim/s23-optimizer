@@ -1,0 +1,7 @@
+# Realistic individual responses; separated here for review, not passed as one command.
+RUN_ANY_IN_BACKGROUND: allow; time=+1h2m ago
+RUN_ANY_IN_BACKGROUND: ignore
+No operations.
+40
+com.example.idle: bucket=45
+User 0: ceDataInode=42 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0 instant=false

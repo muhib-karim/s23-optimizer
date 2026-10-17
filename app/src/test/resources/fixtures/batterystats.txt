@@ -1,0 +1,18 @@
+Battery History (aggregate output deliberately omitted)
+Statistics since last charge:
+  Time on battery: 10h 12m 3s 400ms (80.0%) realtime
+  Estimated power use (mAh):
+    Capacity: 5000, Computed drain: 125.6, actual drain: 100-150
+    Screen: 45.2
+    Uid u0a123: 12.34 ( cpu=7.2 wifi=5.14 )
+    Uid 10124: 0.42 ( cpu=0.42 )
+    Uid u10a125: 1.50 ( cpu=1.50 )
+    Uid u0a999: not-a-number
+
+  u0a123:
+    Wake lock example: 1m 2s 300ms partial (3 times) realtime
+    Wakeup alarm example: 4 times
+  u0a124:
+    Wake lock another: 500ms partial (1 times) realtime
+  u10a125:
+    Wakeup alarm example: 2 times
