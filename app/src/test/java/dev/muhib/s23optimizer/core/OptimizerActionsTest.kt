@@ -13,7 +13,7 @@ class OptimizerActionsTest {
     private val bixby = "com.samsung.android.bixby.agent"
     private val device = DeviceShell()
     private val journal = MemoryJournal()
-    private val engine = ChangeEngine(device, journal, allowAll)
+    private val engine = ChangeEngine(device, journal, policy = allowAll)
 
     private fun roundTrip(kind: ChangeKind, target: String, expected: String, observe: () -> String?): Pair<String?, String?> = runBlocking {
         val original = observe()

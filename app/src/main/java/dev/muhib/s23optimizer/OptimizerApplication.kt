@@ -14,12 +14,12 @@ class AppGraph(val app: Application) {
     val database = Room.databaseBuilder(app, OptimizerDatabase::class.java, "optimizer.db").build()
     val repository = AuditRepository(database.dao())
     val journal = RoomJournal(database.dao())
-    val access = ShizukuAccess()
+    val access = ShizukuAccess(BinderProbe(app))
     val shell = ShizukuShell(access)
     val inventory = AppInventory(app)
     val audit = AuditCollector(app, access, shell, inventory)
     val preferences = app.getSharedPreferences("preferences", Application.MODE_PRIVATE)
-    val engine = ChangeEngine(shell, journal) { kind, target ->
+    val engine = ChangeEngine(shell, journal, { access.refresh(); access.state.value }) { kind, target ->
         if (kind == ChangeKind.ANIMATION) EligibilityResult(true, emptyList())
         else {
             val current = inventory.load().apps.firstOrNull { it.packageName == target }
