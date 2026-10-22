@@ -1,6 +1,7 @@
 package dev.muhib.s23optimizer.ui
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
@@ -15,7 +16,15 @@ import java.io.File
 class OptimizerViewModel(application: Application) : AndroidViewModel(application) {
     val graph = (application as OptimizerApplication).graph
     val snapshots = graph.repository.snapshots.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** Audits only; hourly battery SAMPLE rows feed the Measured panel, not History or the pickers. */
+    val audits = graph.repository.snapshots.map { rows -> rows.filter { it.role != AuditCollector.SAMPLE } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val journal = graph.journal.flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val starts = MutableStateFlow(graph.startTimer.samples())
+    val measured = combine(snapshots, journal, starts) { rows, entries, startList ->
+        MeasuredValue.build(rows.mapNotNull(BatterySample::from), startList, MeasuredValue.pivot(entries))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MeasuredValue.build(emptyList(), emptyList(), null))
+    val batterySamples = MutableStateFlow(graph.preferences.getBoolean(BatterySampleWorker.PREF, false))
     val access = graph.access.state
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow<String?>(null)
@@ -79,13 +88,40 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         val row = graph.engine.undo(id).getOrThrow()
         message.value = "${row.status}: ${row.detail}"
     }
-    fun undoAll() = task {
+    /** One tap: every pending change back to its journaled value, newest first. */
+    fun restoreDefaults() = task {
         val results = graph.engine.undoAll()
+        if (results.isEmpty()) { message.value = "Nothing to restore: no pending changes."; return@task }
         val restored = results.count { it.getOrNull()?.status == JournalStatus.UNDONE }
-        message.value = "$restored of ${results.size} records restored or already at their saved value. Conflicts and failures remain pending in History."
+        val blocked = results.firstNotNullOfOrNull { it.exceptionOrNull()?.message }
+        message.value = "$restored of ${results.size} change(s) restored or already at their saved value. " +
+            (blocked?.let { "Not restored: $it" } ?: "Conflicts and failures stay pending in History.")
+    }
+    fun restorePreview(): String = DryRun.render(DryRun.restore(journal.value))
+    fun refreshStarts() { starts.value = graph.startTimer.samples() }
+    fun sampleBattery() = task {
+        graph.repository.save(graph.audit.batterySample())
+        message.value = "Battery sample saved."
+    }
+    fun setBatterySamples(value: Boolean) {
+        graph.preferences.edit().putBoolean(BatterySampleWorker.PREF, value).apply()
+        BatterySampleWorker.schedule(graph.app, value)
+        batterySamples.value = value
+        if (value) sampleBattery()
+    }
+    fun exportCsv(uri: Uri?) {
+        if (uri == null) return
+        task {
+            val rows = snapshots.value.mapNotNull(BatterySample::from)
+            val text = MeasuredValue.csv(MeasuredValue.build(rows, starts.value, MeasuredValue.pivot(journal.value)), rows, starts.value)
+            withContext(Dispatchers.IO) {
+                requireNotNull(graph.app.contentResolver.openOutputStream(uri, "wt")) { "Cannot open selected document." }.use { it.write(text.toByteArray()) }
+            }
+            message.value = "Measured CSV saved to the location you selected."
+        }
     }
     fun pair(): Pair<AuditSnapshot, AuditSnapshot>? {
-        val rows = snapshots.value
+        val rows = audits.value
         val before = selectedBefore.value?.let { id -> rows.firstOrNull { it.id == id } } ?: rows.firstOrNull { it.role == "BEFORE" }
         val after = selectedAfter.value?.let { id -> rows.firstOrNull { it.id == id } } ?: rows.firstOrNull { it.role == "AFTER" }
         return if (before != null && after != null && after.takenAt > before.takenAt) before to after else null
@@ -125,5 +161,16 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         daily.value = value
     }
     fun finishOnboarding() { graph.preferences.edit().putBoolean("onboarded", true).apply() }
+    fun openShizuku() {
+        val launch = graph.app.packageManager.getLaunchIntentForPackage(BinderProbe.SHIZUKU_PACKAGE)
+        if (launch == null) { message.value = "Shizuku is not installed or cannot be opened."; return }
+        runCatching { graph.app.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.onFailure { message.value = "Shizuku could not open: ${it.message}" }
+    }
+    fun installShizuku() {
+        fun view(uri: String) = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { graph.app.startActivity(view("market://details?id=${BinderProbe.SHIZUKU_PACKAGE}")) }
+            .recoverCatching { graph.app.startActivity(view("https://play.google.com/store/apps/details?id=${BinderProbe.SHIZUKU_PACKAGE}")) }
+            .onFailure { message.value = "No app store or browser is available. Install Shizuku from Google Play." }
+    }
     fun open(link: SettingsLink) { SettingsLinks.launch(graph.app, link)?.let { message.value = it } }
 }

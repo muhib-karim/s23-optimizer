@@ -11,7 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -27,19 +29,23 @@ import java.util.Locale
 
 private enum class Screen(val title: String) {
     ONBOARDING("Get started"), DASHBOARD("Dashboard"), AUDIT("Audit details"), OPTIMISE("Optimise"),
-    SETTINGS("Samsung settings"), HISTORY("History / Undo"), REPORT("Before / After"), ABOUT("About / limits")
+    SETTINGS("Samsung settings"), HISTORY("History / Restore"), REPORT("Before / After report"), ABOUT("About / limits"),
+    MEASURED("Measured value")
 }
-private fun date(ms: Long) = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
-private fun number(value: Double) = String.format(Locale.getDefault(), "%.2f", value)
+internal fun date(ms: Long) = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
+internal fun number(value: Double) = String.format(Locale.getDefault(), "%.2f", value)
 private fun metricValue(metric: Metric?) = metric?.display ?: metric?.value?.let { "${number(it)} ${metric.unit}" } ?: "unavailable"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
-    var screenName by rememberSaveable { mutableStateOf(if (vm.graph.preferences.getBoolean("onboarded", false)) Screen.DASHBOARD.name else Screen.ONBOARDING.name) }
+fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit, exportCsv: () -> Unit = {}, initialScreen: String? = null) {
+    var screenName by rememberSaveable {
+        mutableStateOf(Screen.entries.firstOrNull { it.name == initialScreen }?.name
+            ?: if (vm.graph.preferences.getBoolean("onboarded", false)) Screen.DASHBOARD.name else Screen.ONBOARDING.name)
+    }
     val screen = Screen.valueOf(screenName)
     fun go(value: Screen) { screenName = value.name }
-    val snapshots by vm.snapshots.collectAsStateWithLifecycle()
+    val snapshots by vm.audits.collectAsStateWithLifecycle()
     val journal by vm.journal.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
@@ -53,8 +59,8 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
             actions = { if (screen != Screen.DASHBOARD) TextButton(onClick = { go(Screen.DASHBOARD) }) { Text("Home") } }) },
         bottomBar = {
             NavigationBar {
-                listOf(Screen.DASHBOARD to "◉", Screen.OPTIMISE to "◇", Screen.HISTORY to "↶", Screen.SETTINGS to "⚙").forEach { (item, icon) ->
-                    NavigationBarItem(selected = screen == item, onClick = { go(item) }, icon = { Text(icon) }, label = { Text(when (item) { Screen.SETTINGS -> "Settings"; Screen.HISTORY -> "History"; else -> item.title }) })
+                listOf(Screen.DASHBOARD to "◉", Screen.OPTIMISE to "◇", Screen.MEASURED to "▤", Screen.HISTORY to "↶", Screen.SETTINGS to "⚙").forEach { (item, icon) ->
+                    NavigationBarItem(selected = screen == item, onClick = { go(item) }, icon = { Text(icon) }, label = { Text(when (item) { Screen.SETTINGS -> "Settings"; Screen.HISTORY -> "History"; Screen.MEASURED -> "Measured"; else -> item.title }) })
                 }
             }
         }
@@ -78,6 +84,7 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
                 Screen.HISTORY -> History(vm, snapshots, journal, busy) { go(Screen.REPORT) }
                 Screen.REPORT -> Report(vm, snapshots, busy, export)
                 Screen.ABOUT -> About()
+                Screen.MEASURED -> MeasuredScreen(vm, busy, exportCsv)
             }
         }
     }
@@ -85,11 +92,11 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit) {
 }
 
 @Composable
-private fun Page(content: @Composable ColumnScope.() -> Unit) {
+internal fun Page(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
 }
 @Composable
-private fun Panel(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun Panel(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -98,13 +105,12 @@ private fun Panel(title: String, content: @Composable ColumnScope.() -> Unit) {
     }
 }
 @Composable
-private fun Note(text: String) { Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+internal fun Note(text: String) { Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 @Composable
-private fun Command(text: String) { SelectionContainer { Text(text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
+internal fun Command(text: String) { SelectionContainer { Text(text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
 
 @Composable
 private fun Onboarding(vm: OptimizerViewModel, access: ShellAccess, done: () -> Unit) {
-    val context = LocalContext.current
     Page {
         Text("Understand first. Change deliberately.", style = MaterialTheme.typography.headlineMedium)
         Text("Read-only diagnostics work immediately. Optional Shizuku access enables more measurements and reviewed, reversible shell changes. No root or PC is required.")
@@ -113,15 +119,8 @@ private fun Onboarding(vm: OptimizerViewModel, access: ShellAccess, done: () -> 
             Note("Split screen can help keep both apps visible. Pairing does not grant this app permission yet.")
         }
         Panel("2 · Start Shizuku") { Text("Return to Shizuku and tap Start under Start via Wireless debugging. Wait until it reports running. Repeat Start after every reboot; wireless debugging may need enabling or pairing again.") }
-        Panel("3 · Grant and verify") {
-            Text(access.message)
-            Button(onClick = { vm.graph.access.requestPermission() }, enabled = access.running && !access.granted) { Text("Grant Shizuku permission") }
-            OutlinedButton(onClick = { vm.graph.access.refresh() }) { Text("Refresh connection") }
-            val launch = context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-            if (launch != null && context.packageManager.resolveActivity(launch, 0) != null) OutlinedButton(onClick = {
-                runCatching { context.startActivity(launch) }.onFailure { vm.message.value = "Shizuku manager could not open." }
-            }) { Text("Open Shizuku") }
-        }
+        Text("3 · Grant and verify", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        AccessPanel(vm, access)
         Note("Shell mode and the owner profile are required. One UI may deny individual commands even when permission is granted. This app never kills apps, clears app data, or promises battery savings.")
         Button(onClick = done, modifier = Modifier.fillMaxWidth()) { Text("Continue to diagnostics") }
     }
@@ -146,7 +145,8 @@ private fun Dashboard(vm: OptimizerViewModel, snapshot: AuditSnapshot?, busy: Bo
         OutlinedButton(onClick = { vm.audit("AFTER") }, enabled = !busy && snapshot != null, modifier = Modifier.fillMaxWidth()) { Text("Save AFTER audit") }
         OutlinedButton(onClick = details, enabled = snapshot != null, modifier = Modifier.fillMaxWidth()) { Text("Audit details & app observations") }
         OutlinedButton(onClick = report, modifier = Modifier.fillMaxWidth()) { Text("Before / After report") }
-        Panel("Access") { Text(access.message); TextButton(onClick = onboard) { Text("Pairing walkthrough & permission") } }
+        AccessPanel(vm, access)
+        TextButton(onClick = onboard) { Text("Pairing walkthrough") }
     }
 }
 
@@ -214,7 +214,7 @@ private fun Optimise(vm: OptimizerViewModel, snapshot: AuditSnapshot?, busy: Boo
     var limit by rememberSaveable { mutableIntStateOf(20) }
     Page {
         Text("Review one change at a time", style = MaterialTheme.typography.headlineMedium)
-        Text(access.message)
+        if (!access.ready) AccessPanel(vm, access, "Changes are disabled until Shizuku is ready. Nothing will run, and nothing is journaled.")
         Note("Eligibility requires known last use at least 14 days ago and installation at least 14 days ago. Core and sensitive apps are excluded. Eligibility is rechecked against current usage immediately before applying.")
         Panel("Shorter animations") {
             Text("Set the three standard animation scales to 0.5×. This shortens transitions; it does not make the CPU faster or prove a battery saving.")
@@ -276,6 +276,9 @@ private fun ReviewDialog(vm: OptimizerViewModel, plans: List<ReviewedChange>, bu
                     Note("Undo:"); plan.undoCommands.forEach { Command(it.display) }
                     if (plan.kind == ChangeKind.DISABLE) Text(requireNotNull(BloatAllowlist.entries[plan.target]))
                 }
+                val clipboard = LocalClipboardManager.current
+                Note("Dry run: these commands are listed, not executed. Nothing runs until you tap Apply.")
+                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(DryRun.render(DryRun.apply(plans)))) }) { Text("Copy dry run") }
                 Text(if (plans.any { it.kind != ChangeKind.ANIMATION }) "Confirm this app is not needed for banking, navigation, alarms, timely notifications, accessibility, VPN, or a connected device. Package-name heuristics cannot identify every sensitive app." else "Shorter animations may feel abrupt. This change does not prove a speed or battery-life gain.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it })
@@ -313,16 +316,19 @@ private fun SamsungSettings(vm: OptimizerViewModel, about: () -> Unit) {
 
 @Composable
 private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, journal: List<JournalEntry>, busy: Boolean, report: () -> Unit) {
+    var preview by remember { mutableStateOf<String?>(null) }
+    val pending = UndoPlanner.pending(journal)
     Page {
         Text("A record of every change", style = MaterialTheme.typography.headlineMedium)
-        Note("Undo works in reverse order and only restores this app's journaled changes. If current state differs from both saved and requested values, undo leaves it untouched and keeps the record pending.")
-        Button(onClick = vm::undoAll, enabled = !busy && UndoPlanner.pending(journal).isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Undo all pending changes") }
+        Button(onClick = vm::restoreDefaults, enabled = !busy && pending.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Restore defaults") }
+        Note(if (pending.isEmpty()) "Nothing to restore: no pending changes." else "${pending.size} change(s) pending. One tap writes back every saved value, newest first. A value you changed by hand since is left untouched and stays pending.")
+        OutlinedButton(onClick = { preview = vm.restorePreview() }, enabled = pending.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Preview restore commands") }
         if (journal.isEmpty()) Text("No changes have been journaled.")
         journal.forEach { row ->
             Panel("${row.kind} · ${row.status}") {
                 Text(row.target); Note(date(row.createdAt)); Text("${row.before} → ${row.expected}"); Note(row.detail)
-                Note("Original command:"); Command(Commands.apply(row.kind, row.target, row.expected).display)
-                Note("Restore:"); Commands.undo(row).forEach { Command(it.display) }
+                Note("Original command:"); Command(runCatching { Commands.apply(row.kind, row.target, row.expected).display }.getOrDefault("unavailable for this record"))
+                Note("Restore:"); runCatching { Commands.undo(row) }.getOrDefault(emptyList()).forEach { Command(it.display) }
                 Button(onClick = { vm.undo(row.id) }, enabled = !busy && row.status != JournalStatus.UNDONE) { Text("Undo / retry this change") }
             }
         }
@@ -334,6 +340,11 @@ private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, jour
                 OutlinedButton(onClick = { vm.selectedAfter.value = row.id; report() }) { Text("Use as AFTER") }
             }
         }
+    }
+    preview?.let { text ->
+        AlertDialog(onDismissRequest = { preview = null }, title = { Text("Restore dry run") },
+            text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) { Command(text) } },
+            confirmButton = { TextButton(onClick = { preview = null }) { Text("Close") } })
     }
 }
 
@@ -403,5 +414,29 @@ private fun About() {
         Panel("Reversible, with practical limits") { Text("Changes are opt-in and journaled before execution. Undo checks live state and preserves conflicts for review. Reinstalling / clearing this app's data removes its journal while OS settings can remain changed. Undo before uninstalling. Android itself may later change standby buckets; the app does not silently fight those changes.") }
         Panel("Privacy") { Text("No INTERNET permission, analytics or remote service. Snapshots and journal stay in local Room storage; Android backup is disabled. PDF export and sharing are explicit. Reports contain installed packages and usage evidence. Shizuku's pairing is managed by Shizuku and Android.") }
         Note("Apache License 2.0. AndroidX, Kotlin, coroutines and Shizuku are used under their respective open-source licenses. The complete project license and documented allowlist are in the repository.")
+    }
+}
+
+private fun AccessState.label() = when (this) {
+    AccessState.NOT_INSTALLED -> "not installed"
+    AccessState.NOT_RUNNING -> "not running"
+    AccessState.PERMISSION_NEEDED -> "permission needed"
+    AccessState.PERMISSION_DENIED -> "permission denied"
+    AccessState.UNSUPPORTED_MODE -> "unsupported mode"
+    AccessState.READY -> "ready"
+}
+
+@Composable
+internal fun AccessPanel(vm: OptimizerViewModel, access: ShellAccess, note: String? = null) {
+    Panel("Shizuku · ${access.state.label()}") {
+        Text(access.message)
+        note?.let { Note(it) }
+        when (access.action) {
+            AccessAction.INSTALL_SHIZUKU -> Button(onClick = vm::installShizuku) { Text("Get Shizuku") }
+            AccessAction.OPEN_SHIZUKU -> Button(onClick = vm::openShizuku) { Text("Open Shizuku") }
+            AccessAction.REQUEST_PERMISSION -> Button(onClick = { vm.graph.access.requestPermission() }) { Text("Grant Shizuku permission") }
+            AccessAction.NONE -> Unit
+        }
+        OutlinedButton(onClick = { vm.graph.access.refresh() }) { Text("Check again") }
     }
 }

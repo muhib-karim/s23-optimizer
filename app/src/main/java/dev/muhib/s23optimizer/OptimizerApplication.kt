@@ -19,6 +19,7 @@ class AppGraph(val app: Application) {
     val inventory = AppInventory(app)
     val audit = AuditCollector(app, access, shell, inventory)
     val preferences = app.getSharedPreferences("preferences", Application.MODE_PRIVATE)
+    val startTimer = StartupTimer(preferences)
     val engine = ChangeEngine(shell, journal, { access.refresh(); access.state.value }) { kind, target ->
         if (kind == ChangeKind.ANIMATION) EligibilityResult(true, emptyList())
         else {

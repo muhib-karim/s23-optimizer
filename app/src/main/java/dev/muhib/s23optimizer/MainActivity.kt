@@ -18,8 +18,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         model = ViewModelProvider(this)[OptimizerViewModel::class.java]
+        model.graph.startTimer.attach(this, restored = savedInstanceState != null)
+        // Debug builds only: CI opens each screen directly to capture landing-page screenshots.
+        val initialScreen = if (BuildConfig.DEBUG) intent.getStringExtra("screen") else null
+        if (BuildConfig.DEBUG && savedInstanceState == null && intent.getBooleanExtra("autoAudit", false)) model.audit("BEFORE")
         setContent {
             val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri -> model.export(uri) }
+            val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri -> model.exportCsv(uri) }
             LaunchedEffect(model) {
                 model.share.collect { uri ->
                     val send = Intent(Intent.ACTION_SEND).apply {
@@ -33,12 +38,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
             OptimizerTheme {
-                OptimizerApp(model) { if (model.prepareExport()) exporter.launch("S23-Optimizer-report.pdf") }
+                OptimizerApp(model, export = { if (model.prepareExport()) exporter.launch("S23-Optimizer-report.pdf") },
+                    exportCsv = { csvExporter.launch("S23-Optimizer-measured.csv") }, initialScreen = initialScreen)
             }
         }
     }
     override fun onResume() {
         super.onResume()
-        if (::model.isInitialized) model.graph.access.refresh()
+        if (::model.isInitialized) {
+            model.graph.access.refresh()
+            model.refreshStarts()
+        }
     }
 }
