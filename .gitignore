@@ -16,3 +16,4 @@ dist/
 *.apk
 *.aab
 *.hprof
+.archify/

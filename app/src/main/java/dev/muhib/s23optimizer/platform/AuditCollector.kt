@@ -24,6 +24,8 @@ class AuditCollector(private val context: Context, private val access: ShizukuAc
     private val mutex = Mutex()
     private var lastHeadroomRead: Long? = null
 
+    // One linear pass of independent, null-safe reads; splitting it would scatter the snapshot schema.
+    @Suppress("CyclomaticComplexMethod")
     suspend fun collect(role: String): AuditSnapshot = mutex.withLock { withContext(Dispatchers.IO) {
         val started = System.currentTimeMillis()
         val metrics = mutableListOf<Metric>()
@@ -33,29 +35,9 @@ class AuditCollector(private val context: Context, private val access: ShizukuAc
             "No benchmark, measured battery-life gain, guaranteed per-app energy, or per-app private-storage measurement is claimed."
         )
         fun add(id: String, label: String, value: Double?, unit: String, source: String, note: String = "", display: String? = null, cumulative: Boolean = false) {
-            val safe = value?.takeIf { it.isFinite() }
-            metrics += Metric(id, label, safe, unit, if (safe == null && display == null) "unavailable" else source, note, cumulative, display)
+            metrics += metric(id, label, value, unit, source, note, display, cumulative)
         }
-        val battery = runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()
-        val bm = context.getSystemService(BatteryManager::class.java)
-        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)?.takeIf { it >= 0 }
-        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1)?.takeIf { it > 0 }
-        val percent = if (level != null && scale != null) level * 100.0 / scale else runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).takeIf { it in 0..100 }?.toDouble() }.getOrNull()
-        add("battery.level_pct", "Battery level", percent, "%", if (level != null && scale != null) "ACTION_BATTERY_CHANGED" else "BatteryManager.BATTERY_PROPERTY_CAPACITY", "Charge level is not battery health and is excluded from scoring.")
-        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)?.takeIf { it in 1..5 }
-        add("battery.charging", "Charging state", status?.takeIf { it != BatteryManager.BATTERY_STATUS_UNKNOWN }?.let { if (it == BatteryManager.BATTERY_STATUS_CHARGING || it == BatteryManager.BATTERY_STATUS_FULL) 1.0 else 0.0 }, "boolean", "ACTION_BATTERY_CHANGED", display = when (status) {
-            BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"; BatteryManager.BATTERY_STATUS_FULL -> "Full"; BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"; BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "Not charging"; else -> null
-        })
-        val health = battery?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)?.takeIf { it in 2..7 }
-        add("battery.health", "Battery health flag", health?.toDouble(), "enum", "ACTION_BATTERY_CHANGED", "OS health flag, not remaining capacity percentage.", when (health) {
-            BatteryManager.BATTERY_HEALTH_GOOD -> "Good"; BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat"; BatteryManager.BATTERY_HEALTH_DEAD -> "Dead"; BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over voltage"; BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "Failure"; BatteryManager.BATTERY_HEALTH_COLD -> "Cold"; else -> null
-        })
-        val temperature = battery?.takeIf { it.hasExtra(BatteryManager.EXTRA_TEMPERATURE) }?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)?.takeIf { it in -500..1000 }?.div(10.0)
-        add("battery.temp_c", "Battery temperature", temperature, "°C", "ACTION_BATTERY_CHANGED", "Changes with charging, workload and ambient temperature.")
-        val cycles = if (Build.VERSION.SDK_INT >= 34) battery?.takeIf { it.hasExtra(BatteryManager.EXTRA_CYCLE_COUNT) }?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1)?.takeIf { it >= 0 }?.toDouble() else null
-        add("battery.cycles", "Battery cycle count", cycles, "cycles", "ACTION_BATTERY_CHANGED.EXTRA_CYCLE_COUNT", "Only where exposed by this OS and battery hardware.", cumulative = true)
-        val chargeCounter = runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER).takeIf { it > 0 }?.toDouble() }.getOrNull()
-        add("battery.charge_uah", "Remaining charge counter", chargeCounter, "µAh", "BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER", "Hardware estimate; not design capacity or a health percentage.")
+        metrics += batteryMetrics()
 
         val storage = runCatching { StatFs(context.filesDir.absolutePath) }.getOrNull()
         val total = storage?.totalBytes?.takeIf { it > 0 }
@@ -142,4 +124,44 @@ class AuditCollector(private val context: Context, private val access: ShizukuAc
         notes += "Collection finished ${System.currentTimeMillis() - started} ms after the snapshot timestamp."
         AuditSnapshot(takenAt = started, role = role, metrics = metrics, apps = apps, notes = notes)
     } }
+
+    private fun metric(id: String, label: String, value: Double?, unit: String, source: String, note: String = "", display: String? = null, cumulative: Boolean = false): Metric {
+        val safe = value?.takeIf { it.isFinite() }
+        return Metric(id, label, safe, unit, if (safe == null && display == null) "unavailable" else source, note, cumulative, display)
+    }
+
+    private fun batteryMetrics(): List<Metric> {
+        val metrics = mutableListOf<Metric>()
+        fun add(id: String, label: String, value: Double?, unit: String, source: String, note: String = "", display: String? = null, cumulative: Boolean = false) {
+            metrics += metric(id, label, value, unit, source, note, display, cumulative)
+        }
+        val battery = runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()
+        val bm = context.getSystemService(BatteryManager::class.java)
+        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)?.takeIf { it >= 0 }
+        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1)?.takeIf { it > 0 }
+        val percent = if (level != null && scale != null) level * 100.0 / scale else runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).takeIf { it in 0..100 }?.toDouble() }.getOrNull()
+        add("battery.level_pct", "Battery level", percent, "%", if (level != null && scale != null) "ACTION_BATTERY_CHANGED" else "BatteryManager.BATTERY_PROPERTY_CAPACITY", "Charge level is not battery health and is excluded from scoring.")
+        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)?.takeIf { it in 1..5 }
+        add("battery.charging", "Charging state", status?.takeIf { it != BatteryManager.BATTERY_STATUS_UNKNOWN }?.let { if (it == BatteryManager.BATTERY_STATUS_CHARGING || it == BatteryManager.BATTERY_STATUS_FULL) 1.0 else 0.0 }, "boolean", "ACTION_BATTERY_CHANGED", display = when (status) {
+            BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"; BatteryManager.BATTERY_STATUS_FULL -> "Full"; BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"; BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "Not charging"; else -> null
+        })
+        val health = battery?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)?.takeIf { it in 2..7 }
+        add("battery.health", "Battery health flag", health?.toDouble(), "enum", "ACTION_BATTERY_CHANGED", "OS health flag, not remaining capacity percentage.", when (health) {
+            BatteryManager.BATTERY_HEALTH_GOOD -> "Good"; BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat"; BatteryManager.BATTERY_HEALTH_DEAD -> "Dead"; BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over voltage"; BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "Failure"; BatteryManager.BATTERY_HEALTH_COLD -> "Cold"; else -> null
+        })
+        val temperature = battery?.takeIf { it.hasExtra(BatteryManager.EXTRA_TEMPERATURE) }?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)?.takeIf { it in -500..1000 }?.div(10.0)
+        add("battery.temp_c", "Battery temperature", temperature, "°C", "ACTION_BATTERY_CHANGED", "Changes with charging, workload and ambient temperature.")
+        val cycles = if (Build.VERSION.SDK_INT >= 34) battery?.takeIf { it.hasExtra(BatteryManager.EXTRA_CYCLE_COUNT) }?.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1)?.takeIf { it >= 0 }?.toDouble() else null
+        add("battery.cycles", "Battery cycle count", cycles, "cycles", "ACTION_BATTERY_CHANGED.EXTRA_CYCLE_COUNT", "Only where exposed by this OS and battery hardware.", cumulative = true)
+        val chargeCounter = runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER).takeIf { it > 0 }?.toDouble() }.getOrNull()
+        add("battery.charge_uah", "Remaining charge counter", chargeCounter, "µAh", "BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER", "Hardware estimate; not design capacity or a health percentage.")
+        return metrics
+    }
+
+    /** Battery-only snapshot for the drain panel (role SAMPLE); no shell, no app inventory. */
+    suspend fun batterySample(): AuditSnapshot = withContext(Dispatchers.IO) {
+        AuditSnapshot(takenAt = System.currentTimeMillis(), role = SAMPLE, metrics = batteryMetrics())
+    }
+
+    companion object { const val SAMPLE = "SAMPLE" }
 }

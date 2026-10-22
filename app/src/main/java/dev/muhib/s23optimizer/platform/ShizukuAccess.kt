@@ -1,5 +1,6 @@
 package dev.muhib.s23optimizer.platform
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Process
 import dev.muhib.s23optimizer.core.*
@@ -9,15 +10,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import rikka.shizuku.Shizuku
 import java.io.InputStream
 
-data class ShellAccess(val running: Boolean = false, val granted: Boolean = false, val shellIdentity: Boolean = false, val message: String = "Shizuku is not running.") {
-    val ready: Boolean get() = running && granted && shellIdentity
+/** Reads Shizuku's binder state; every call may throw if the binder dies mid-read. */
+class BinderProbe(private val context: Context) : ShizukuProbe {
+    override fun installed() = runCatching { context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0); true }.getOrDefault(false)
+    override fun running() = Shizuku.pingBinder()
+    override fun granted() = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    override fun deniedPermanently() = Shizuku.shouldShowRequestPermissionRationale()
+    override fun serverUid() = Shizuku.getUid()
+    override fun ownerProfile() = Process.myUid() / 100_000 == 0
+    companion object { const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api" }
 }
 
-class ShizukuAccess {
+class ShizukuAccess(private val probe: ShizukuProbe) {
     private val mutable = MutableStateFlow(ShellAccess())
     val state = mutable.asStateFlow()
     private val received = Shizuku.OnBinderReceivedListener { refresh() }
-    private val dead = Shizuku.OnBinderDeadListener { mutable.value = ShellAccess(message = "Shizuku disconnected. Start it again after reboot.") }
+    private val dead = Shizuku.OnBinderDeadListener {
+        mutable.value = ShellAccess(AccessState.NOT_RUNNING, "Shizuku disconnected. Start it again in Shizuku (needed after every reboot).", AccessAction.OPEN_SHIZUKU)
+    }
     private val permission = Shizuku.OnRequestPermissionResultListener { _, _ -> refresh() }
     init {
         Shizuku.addBinderReceivedListenerSticky(received)
@@ -25,22 +35,10 @@ class ShizukuAccess {
         Shizuku.addRequestPermissionResultListener(permission)
         refresh()
     }
-    fun refresh() {
-        mutable.value = runCatching {
-            val running = Shizuku.pingBinder()
-            val granted = running && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-            val shell = granted && Shizuku.getUid() == 2000 && Process.myUid() / 100_000 == 0
-            ShellAccess(running, granted, shell, when {
-                !running -> "Shizuku is not running. Pair and start it on this phone."
-                !granted -> "Shizuku is running; permission is needed."
-                !shell -> "Use Shizuku in wireless-debugging shell mode on the owner profile. Root and secondary profiles are not supported."
-                else -> "Shizuku connected • shell permission granted"
-            })
-        }.getOrElse { ShellAccess(message = "Shizuku unavailable: ${it.message}") }
-    }
+    fun refresh() { mutable.value = AccessResolver.resolve(probe) }
     fun requestPermission() {
         runCatching { if (Shizuku.pingBinder()) Shizuku.requestPermission(23) }
-            .onFailure { mutable.value = ShellAccess(message = "Permission request failed: ${it.message}") }
+            .onFailure { mutable.value = ShellAccess(AccessState.NOT_RUNNING, "Permission request failed: ${it.message}", AccessAction.OPEN_SHIZUKU) }
         refresh()
     }
 }
@@ -91,9 +89,7 @@ class ShizukuShell(private val access: ShizukuAccess) : ShellRunner {
             }
         } catch (_: TimeoutCancellationException) {
             ShellResult(-1, "", "Shell command timed out after 12 seconds; state may be uncertain.")
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { ShellResult(-1, "", "Shell unavailable: ${e.message}") }
-        finally { runCatching { process?.destroy() } }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { ShellResult(-1, "", "Shell unavailable: ${e.message}") } finally { runCatching { process?.destroy() } }
     }
 }
 

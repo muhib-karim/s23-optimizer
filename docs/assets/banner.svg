@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="S23 Optimizer: reversible Shizuku tweaks, measured on the phone">
+  <rect width="1280" height="320" fill="#101416"/>
+  <g stroke="#2a3538" stroke-width="1">
+    <path d="M640 64H1216M640 112H1216M640 160H1216M640 208H1216M640 256H1216"/>
+  </g>
+  <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="17" fill="#b9c4c5">
+    <text x="652" y="98">01  read     am get-standby-bucket --user 0 pkg  → 20</text>
+    <text x="652" y="146">02  journal  STANDBY · before 20 · expected 45</text>
+    <text x="652" y="194">03  apply    am set-standby-bucket … restricted</text>
+    <text x="652" y="242" fill="#9bd7ca">04  verify   → 45 · APPLIED</text>
+    <text x="652" y="290" fill="#e3c38c">05  restore  am set-standby-bucket … 20 → UNDONE</text>
+  </g>
+  <g transform="translate(64 84)">
+    <rect x="0" y="0" width="56" height="56" rx="15" fill="none" stroke="#9bd7ca" stroke-width="4.5"/>
+    <path d="M12 36h9l5-15 6.5 24 5.2-16.4H45" fill="none" stroke="#9bd7ca" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="64" y="196" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="700" font-size="58" fill="#e0e6e6" letter-spacing="-1">S23 Optimizer</text>
+  <text x="64" y="240" font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="22" fill="#b9c4c5">Reversible Shizuku tweaks. Measured on the phone.</text>
+  <text x="64" y="274" font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" font-size="17" fill="#7f8c8d">No root · no PC · no INTERNET permission</text>
+</svg>

@@ -11,6 +11,8 @@ import java.util.Date
 import java.util.Locale
 
 object ReportPdf {
+    // Linear page layout of every field; each branch is a "value or unavailable" choice, not control flow.
+    @Suppress("CyclomaticComplexMethod")
     fun write(before: AuditSnapshot, after: AuditSnapshot, output: OutputStream) {
         require(after.takenAt > before.takenAt) { "AFTER must be later than BEFORE." }
         val comparison = ReportDiff.compare(before, after)

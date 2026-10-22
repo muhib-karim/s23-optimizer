@@ -26,14 +26,16 @@ data class ReviewedChange(val kind: ChangeKind, val target: String, val before: 
 class ChangeEngine(
     private val shell: ShellRunner,
     private val journal: JournalStore,
+    private val access: () -> ShellAccess = { ShellAccess.Ready },
     private val policy: suspend (ChangeKind, String) -> EligibilityResult
 ) {
     private val mutex = Mutex()
-    private suspend fun <T> safely(block: suspend () -> T): Result<T> = try { Result.success(block()) }
-        catch (e: CancellationException) { throw e }
-        catch (e: Exception) { Result.failure(e) }
+    // Checked before any shell read or journal write: no Shizuku means no command at all.
+    private fun requireAccess() = access().let { check(it.ready) { it.message } }
+    private suspend fun <T> safely(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
 
     suspend fun prepare(kind: ChangeKind, target: String, expected: String): Result<ReviewedChange> = safely {
+        requireAccess()
         val eligible = policy(kind, target)
         require(eligible.allowed) { eligible.reasons.joinToString(" ") }
         Commands.apply(kind, target, expected)
@@ -45,6 +47,7 @@ class ChangeEngine(
     }
 
     suspend fun apply(plan: ReviewedChange): Result<JournalEntry> = safely { mutex.withLock {
+        requireAccess()
         val eligible = policy(plan.kind, plan.target)
         require(eligible.allowed) { eligible.reasons.joinToString(" ") }
         val prior = Commands.parse(plan.kind, shell.run(Commands.read(plan.kind, plan.target)))
@@ -64,14 +67,13 @@ class ChangeEngine(
             saved.copy(status = status, completedAt = System.currentTimeMillis(), detail =
                 "Exit ${output.exitCode}; observed ${verified ?: "unavailable"}. ${output.stderr.take(1200)} ${output.stdout.take(1200)}")
                 .also { journal.update(it) }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             saved.copy(status = JournalStatus.NEEDS_REVIEW, detail = "Interrupted: ${e.message}. Inspect or undo; state is uncertain.")
                 .also { journal.update(it) }
         }
     } }
 
-    suspend fun undo(id: Long): Result<JournalEntry> = safely { mutex.withLock { undoLocked(id) } }
+    suspend fun undo(id: Long): Result<JournalEntry> = safely { mutex.withLock { requireAccess(); undoLocked(id) } }
     private suspend fun undoLocked(id: Long): JournalEntry {
         val entry = journal.entries().first { it.id == id }
         if (entry.status == JournalStatus.UNDONE) return entry
@@ -92,12 +94,14 @@ class ChangeEngine(
             return entry.copy(status = if (restored) JournalStatus.UNDONE else JournalStatus.UNDO_FAILED,
                 completedAt = System.currentTimeMillis(), detail = if (restored) "Prior value verified: ${entry.before}" else "Undo pending; observed ${verified ?: "unavailable"}.")
                 .also { journal.update(it) }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return entry.copy(status = JournalStatus.UNDO_FAILED, detail = "Undo pending: ${e.message}").also { journal.update(it) }
         }
     }
+    /** Restore defaults: every pending record, newest first. Without access nothing is attempted or rewritten. */
     suspend fun undoAll(): List<Result<JournalEntry>> = mutex.withLock {
-        UndoPlanner.pending(journal.entries()).map { entry -> safely { undoLocked(entry.id) } }
+        val pending = UndoPlanner.pending(journal.entries())
+        val blocked = safely { requireAccess() }.exceptionOrNull()
+        pending.map { entry -> if (blocked != null) Result.failure(blocked) else safely { undoLocked(entry.id) } }
     }
 }

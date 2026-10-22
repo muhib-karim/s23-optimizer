@@ -1,0 +1,34 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_size = 4
+indent_style = space
+# House style is deliberately compact (one-line guards, dense data mapping). ktlint enforces
+# formatting hygiene, imports, naming and spacing; it does not reflow long lines.
+ktlint_code_style = intellij_idea
+max_line_length = off
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Wrapping rules that would reflow the compact house style.
+ktlint_standard_statement-wrapping = disabled
+ktlint_standard_wrapping = disabled
+ktlint_standard_argument-list-wrapping = disabled
+ktlint_standard_multiline-if-else = disabled
+ktlint_standard_function-literal = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_function-expression-body = disabled
+ktlint_standard_enum-wrapping = disabled
+ktlint_standard_condition-wrapping = disabled
+ktlint_standard_annotation = disabled
+ktlint_standard_trailing-comma-on-call-site = disabled
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+# Packages import their own layer wholesale (core.*, platform.*).
+ktlint_standard_no-wildcard-imports = disabled
+# Compact DAO / helper one-liners keep their annotations and comments packed.
+ktlint_standard_spacing-between-declarations-with-annotations = disabled
+ktlint_standard_spacing-between-declarations-with-comments = disabled

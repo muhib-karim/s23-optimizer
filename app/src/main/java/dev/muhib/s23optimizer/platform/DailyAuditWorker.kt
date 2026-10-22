@@ -14,8 +14,7 @@ class DailyAuditWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // Diagnostics only. Local collectors still run when Shizuku is stopped after reboot.
             graph.repository.save(graph.audit.collect("DAILY"))
             Result.success()
-        } catch (e: CancellationException) { throw e }
-        catch (_: Exception) { if (runAttemptCount < 2) Result.retry() else Result.failure() }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { if (runAttemptCount < 2) Result.retry() else Result.failure() }
     }
     companion object {
         fun schedule(context: Context, enabled: Boolean) {

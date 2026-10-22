@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlinx.kover")
 }
 
 val storePath = System.getenv("SIGNING_STORE_FILE")
@@ -18,8 +19,9 @@ android {
         applicationId = "dev.muhib.s23optimizer"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = System.getenv("RELEASE_VERSION") ?: "1.0.0"
+        // 2 belongs to the separate v2.0.0-alpha1 pre-release line.
+        versionCode = 3
+        versionName = System.getenv("RELEASE_VERSION") ?: "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -46,7 +48,23 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
-    testOptions { unitTests.isReturnDefaultValues = false }
+    testOptions {
+        unitTests.isReturnDefaultValues = false
+        // Robolectric needs merged resources and the manifest for the UI smoke test.
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.maxHeapSize = "2g" }
+    }
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                // Generated code: Room DAOs, Compose lambdas, BuildConfig.
+                classes("*_Impl", "*_Impl\$*", "*ComposableSingletons*", "dev.muhib.s23optimizer.BuildConfig")
+            }
+        }
+    }
 }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
@@ -70,4 +88,10 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    testImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("androidx.test.ext:junit-ktx:1.2.1")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

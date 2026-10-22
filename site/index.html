@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>S23 Optimizer · reversible tweaks, measured results</title>
+  <meta name="description" content="A no-root Android app for the Galaxy S23 Ultra: audits the phone, applies a few reviewed Shizuku tweaks, journals every prior value, restores defaults in one tap, and shows battery drain and start time measured on the device.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#101416" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#e8efed" media="(prefers-color-scheme: light)">
+  <meta property="og:title" content="S23 Optimizer">
+  <meta property="og:description" content="Reversible Shizuku tweaks for Galaxy phones. Every change journaled, one-tap restore, numbers measured on the device.">
+  <meta property="og:image" content="screenshots/dashboard.png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/plex-sans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <a class="brand" href="./" aria-label="S23 Optimizer home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M9 20.5h4.2l2.3-7 3 11 2.4-7.5H23" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>S23 Optimizer</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#ledger">How it changes things</a>
+      <a href="#tweaks">Tweaks</a>
+      <a href="#measured">Measured</a>
+      <a href="#install">Install</a>
+      <a class="nav-source" href="https://github.com/muhib-karim/s23-optimizer">Source</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Tune your Galaxy.<br>Keep the receipt.</h1>
+        <p class="lede">S23 Optimizer audits your phone, applies a handful of reviewed tweaks through Shizuku, writes down every value before it changes it, and keeps one button between you and the defaults. No root, no PC, and no claim it did not measure on your phone.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/muhib-karim/s23-optimizer/releases/latest">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Download the APK
+          </a>
+          <a class="button" href="https://github.com/muhib-karim/s23-optimizer">Read the source</a>
+        </div>
+        <p class="facts">Android 10+ · built for Galaxy S23 Ultra · Apache-2.0 · no INTERNET permission · signed release with SHA-256</p>
+      </div>
+      <figure class="phone hero-phone">
+        <img src="screenshots/dashboard.png" width="1080" height="2400" alt="Dashboard after a BEFORE audit: a condition score out of 100 built from free storage, battery temperature and thermal status, with key measurements and their sources.">
+      </figure>
+    </section>
+
+    <section id="ledger" class="ledger" aria-labelledby="ledger-title">
+      <div class="section-head">
+        <h2 id="ledger-title">Nothing changes until it is written down</h2>
+        <p>Every tweak runs the same five steps. The journal row exists before the shell command does, so a crash, a dead Shizuku or a flat battery leaves a record that Restore can still act on.</p>
+      </div>
+      <ol class="ledger-rows">
+        <li>
+          <span class="step">Read</span>
+          <code>am get-standby-bucket --user 0 org.example.reader</code>
+          <span class="result">→ 20</span>
+        </li>
+        <li>
+          <span class="step">Journal</span>
+          <code>STANDBY · before 20 · expected 45 · PREPARED</code>
+          <span class="result">saved first</span>
+        </li>
+        <li>
+          <span class="step">Apply</span>
+          <code>am set-standby-bucket --user 0 org.example.reader restricted</code>
+          <span class="result">exit 0</span>
+        </li>
+        <li>
+          <span class="step">Verify</span>
+          <code>am get-standby-bucket --user 0 org.example.reader</code>
+          <span class="result ok">→ 45 · APPLIED</span>
+        </li>
+        <li class="undo">
+          <span class="step">Restore</span>
+          <code>am set-standby-bucket --user 0 org.example.reader 20</code>
+          <span class="result">→ 20 · UNDONE</span>
+        </li>
+      </ol>
+      <p class="aside">How the pieces fit: <a href="architecture.html">interactive architecture diagram</a>, traced from the source.</p>
+      <p class="aside">If you changed that setting by hand in the meantime, Restore sees a value that is neither 20 nor 45, leaves it alone, and keeps the row pending for you to decide.</p>
+    </section>
+
+    <section id="tweaks" class="tweaks" aria-labelledby="tweaks-title">
+      <div class="section-head">
+        <h2 id="tweaks-title">Four tweaks, four exact undos</h2>
+        <p>That is the whole list. Background and standby changes only reach user-installed apps that have not been opened for 14 days and were installed at least 14 days ago. Launchers, keyboards, dialers, messaging, camera, alarms, maps, VPN, accessibility, banking, wallet, Knox and watch apps are never eligible.</p>
+      </div>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="tweaks-title">
+        <table>
+          <thead>
+            <tr><th scope="col">Tweak</th><th scope="col">What it does</th><th scope="col">Command</th><th scope="col">Undo</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Background restriction</th>
+              <td>Stops an idle app from running in the background. Notifications and sync from it may be delayed.</td>
+              <td><code>cmd appops set --user 0 &lt;pkg&gt; RUN_ANY_IN_BACKGROUND ignore</code></td>
+              <td><code>cmd appops set --user 0 &lt;pkg&gt; RUN_ANY_IN_BACKGROUND &lt;previous&gt;</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Standby bucket</th>
+              <td>Moves an idle app to <em>rare</em> (40) or <em>restricted</em> (45), so Android runs its jobs and alarms less often.</td>
+              <td><code>am set-standby-bucket --user 0 &lt;pkg&gt; rare|restricted</code></td>
+              <td><code>am set-standby-bucket --user 0 &lt;pkg&gt; &lt;previous bucket&gt;</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Disable listed bloat</th>
+              <td>Disables one of seven named packages (Bixby Voice, Samsung Free, AR Zone, Game Launcher, three Meta stubs), only after you opt in.</td>
+              <td><code>pm disable-user --user 0 &lt;pkg&gt;</code></td>
+              <td><code>pm enable --user 0 &lt;pkg&gt;</code>, then <code>pm default-state</code> if it was in its default state</td>
+            </tr>
+            <tr>
+              <th scope="row">Shorter animations</th>
+              <td>Sets the three animation scales to 0.5×. Transitions get shorter; the CPU does not get faster.</td>
+              <td><code>settings put global &lt;scale&gt; 0.5</code></td>
+              <td><code>settings put global &lt;scale&gt; &lt;previous&gt;</code>, or <code>settings delete</code> if it was unset</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="measured" class="measured" aria-labelledby="measured-title">
+      <div class="section-head">
+        <h2 id="measured-title">Measured on the phone, not promised</h2>
+        <p>The Measured screen puts everything before your first tweak on one side and everything from that tweak until you restore on the other. Export it as CSV with every raw sample.</p>
+      </div>
+      <div class="split">
+        <div>
+          <h3>What it measures</h3>
+          <ul>
+            <li><strong>Battery drain, %/h.</strong> Android's battery level at each audit or hourly sample. Only discharging pairs 5 min to 12 h apart with no level rise count, and at least one hour is needed.</li>
+            <li><strong>App start time.</strong> This app's own cold start, from process start to the first drawn frame, over the last 50 launches.</li>
+            <li><strong>Audit readings.</strong> Storage, RAM, thermal status and headroom, battery temperature, CPU frequency samples, refresh rate, animation scales and app inventory, each with its source.</li>
+            <li><strong>With Shizuku.</strong> Per-UID drain estimates, wakelocks and alarms from <code>dumpsys batterystats</code>, and every app's standby bucket.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>What it does not claim</h3>
+          <ul>
+            <li>A battery-life gain for your phone. Screen time, signal and temperature change between days; the panel is an observation, not proof of cause.</li>
+            <li>Exact per-app energy. batterystats figures are estimates per UID and can be shared by several packages.</li>
+            <li>The speed of other apps. Cold start is a proxy for how responsive the phone is, not a benchmark.</li>
+            <li>Anything it could not read. Unreadable values are shown as unavailable, never as zero.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="screens" class="screens" aria-labelledby="screens-title">
+      <div class="section-head">
+        <h2 id="screens-title">The app, as CI sees it</h2>
+        <p>Captured by GitHub Actions from the debug build on an Android 14 emulator with no Shizuku installed, so every change control shows its locked state and says why. The emulator battery was set to 78% and discharging, and Usage access was granted, before the audit ran.</p>
+      </div>
+      <ul class="gallery">
+        <li><figure class="phone"><img loading="lazy" src="screenshots/onboarding.png" width="1080" height="2400" alt="Onboarding: pairing Shizuku on the phone in three steps, with the Shizuku status panel reporting it is not installed."></figure><p>Onboarding and Shizuku status</p></li>
+        <li><figure class="phone"><img loading="lazy" src="screenshots/audit.png" width="1080" height="2400" alt="Audit details listing collection notes and each reading with its source."></figure><p>Audit, with the source of every reading</p></li>
+        <li><figure class="phone"><img loading="lazy" src="screenshots/optimise.png" width="1080" height="2400" alt="Optimise screen: changes disabled until Shizuku is ready, with the reason and an action."></figure><p>Optimise, locked without Shizuku</p></li>
+        <li><figure class="phone"><img loading="lazy" src="screenshots/measured.png" width="1080" height="2400" alt="Measured value screen with before and after battery drain and app start time, sampling switch and CSV export."></figure><p>Measured before and after</p></li>
+        <li><figure class="phone"><img loading="lazy" src="screenshots/history.png" width="1080" height="2400" alt="History screen with the Restore defaults button, restore preview and saved snapshots."></figure><p>History and Restore defaults</p></li>
+        <li><figure class="phone"><img loading="lazy" src="screenshots/settings.png" width="1080" height="2400" alt="Samsung settings shortcuts with manual paths for Adaptive battery, Protect battery and Motion smoothness."></figure><p>Samsung settings, explained</p></li>
+      </ul>
+    </section>
+
+    <section id="safety" class="safety" aria-labelledby="safety-title">
+      <div class="section-head">
+        <h2 id="safety-title">Safety notes</h2>
+      </div>
+      <dl class="notes">
+        <div><dt>One tap back</dt><dd><strong>Restore defaults</strong> writes back every journaled value, newest first. <strong>Preview restore commands</strong> shows exactly what it will run.</dd></div>
+        <div><dt>Dry run first</dt><dd>The confirm screen lists the read, apply, verify and undo commands for each change and copies them as text. Nothing runs until you tick the box and tap Apply.</dd></div>
+        <div><dt>No Shizuku, no changes</dt><dd>Not installed, stopped, permission pending, permission denied, or root mode: each is named with its fix, and the engine refuses before any shell command or journal write. The audit still runs.</dd></div>
+        <div><dt>Never</dt><dd>No force-stop sweeps, app killing, cache or data clearing, RAM cleaning, or undocumented refresh-rate keys.</dd></div>
+        <div><dt>Private</dt><dd>No INTERNET permission, no analytics, Android backup off. Reports leave the phone only when you export or share them.</dd></div>
+        <div><dt>Before uninstalling</dt><dd>Restore first. Clearing this app's data removes its journal, while the Android settings it changed stay changed.</dd></div>
+      </dl>
+    </section>
+
+    <section id="install" class="install" aria-labelledby="install-title">
+      <div class="section-head">
+        <h2 id="install-title">Install with Shizuku, on the phone</h2>
+        <p>About five minutes, Wi-Fi on, no computer.</p>
+      </div>
+      <ol class="steps">
+        <li>Download <a href="https://github.com/muhib-karim/s23-optimizer/releases/latest">the latest APK</a> and its <code>.sha256</code>, allow your browser to install unknown apps, and install it.</li>
+        <li>Install <strong>Shizuku</strong> from Google Play.</li>
+        <li>Settings → About phone → Software information: tap <strong>Build number</strong> seven times to turn on Developer options.</li>
+        <li>Settings → Developer options: turn on <strong>Wireless debugging</strong>.</li>
+        <li>In Shizuku tap <strong>Pairing</strong>; in Wireless debugging tap <strong>Pair device with pairing code</strong> and type the code into Shizuku's notification.</li>
+        <li>In Shizuku tap <strong>Start</strong>. Open S23 Optimizer and tap <strong>Grant Shizuku permission</strong>.</li>
+      </ol>
+      <p class="aside">After a reboot, turn Wireless debugging back on and tap Start in Shizuku again. Pairing is remembered.</p>
+      <a class="button primary" href="https://github.com/muhib-karim/s23-optimizer/releases/latest">Download the APK</a>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>S23 Optimizer is open source under the Apache License 2.0. Not affiliated with Samsung or Shizuku.</p>
+    <p><a href="https://github.com/muhib-karim/s23-optimizer">GitHub</a> · <a href="https://github.com/muhib-karim/s23-optimizer/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/muhib-karim/s23-optimizer/releases">Releases</a> · <a href="architecture.html">Architecture</a> · <a href="fonts/OFL.txt">Font licences</a></p>
+  </footer>
+  <script>
+    // One authored moment: ledger rows stamp in order once. Rows are visible without JS or with reduced motion.
+    (function () {
+      var list = document.querySelector('.ledger-rows');
+      if (!list || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      list.classList.add('armed');
+      new IntersectionObserver(function (entries, observer) {
+        if (!entries[0].isIntersecting) return;
+        list.classList.add('play');
+        observer.disconnect();
+      }, { threshold: 0.35 }).observe(list);
+    })();
+  </script>
+</body>
+</html>

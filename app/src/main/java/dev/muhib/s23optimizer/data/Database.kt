@@ -2,7 +2,9 @@ package dev.muhib.s23optimizer.data
 
 import androidx.room.*
 import dev.muhib.s23optimizer.core.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 @Entity(tableName = "snapshots")
@@ -26,6 +28,7 @@ interface OptimizerDao {
     @Insert suspend fun insertSnapshot(snapshot: SnapshotEntity): Long
     @Query("SELECT * FROM snapshots ORDER BY takenAt DESC, id DESC") fun observeSnapshots(): Flow<List<SnapshotEntity>>
     @Query("SELECT * FROM snapshots ORDER BY takenAt DESC, id DESC LIMIT 1") suspend fun latest(): SnapshotEntity?
+    @Query("DELETE FROM snapshots WHERE role = :role AND takenAt < :before") suspend fun deleteRoleBefore(role: String, before: Long): Int
     @Insert suspend fun insertJournal(entry: JournalEntity): Long
     @Update suspend fun updateJournal(entry: JournalEntity)
     @Query("SELECT * FROM journal ORDER BY createdAt DESC, id DESC") suspend fun journal(): List<JournalEntity>
@@ -36,8 +39,14 @@ interface OptimizerDao {
 abstract class OptimizerDatabase : RoomDatabase() { abstract fun dao(): OptimizerDao }
 
 class AuditRepository(private val dao: OptimizerDao) {
-    val snapshots = dao.observeSnapshots().map { rows -> rows.map { SnapshotCodec.decode(it) } }
+    // JSON decoding runs off the main thread; Room only emits the rows.
+    val snapshots = dao.observeSnapshots().map { rows -> rows.map { SnapshotCodec.decode(it) } }.flowOn(Dispatchers.Default)
     suspend fun save(snapshot: AuditSnapshot): Long = dao.insertSnapshot(SnapshotEntity(takenAt = snapshot.takenAt, role = snapshot.role, payload = SnapshotCodec.encode(snapshot)))
+
+    /** Battery samples are kept for 30 days (about 720 hourly rows), then pruned. */
+    suspend fun saveSample(snapshot: AuditSnapshot): Long = save(snapshot).also { dao.deleteRoleBefore(snapshot.role, snapshot.takenAt - SAMPLE_RETENTION_MS) }
+
+    companion object { const val SAMPLE_RETENTION_MS = 30 * DAY_MS }
 }
 
 class RoomJournal(private val dao: OptimizerDao) : JournalStore {
