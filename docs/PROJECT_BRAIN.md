@@ -7,7 +7,7 @@ v1.1.0 on branch `upgrade/v1.1.0`: tests + coverage, safety (restore defaults, d
 ## Status
 - Version / branch: 1.1.0 on upgrade/v1.1.0 (not merged, not tagged).
 - CI: all four workflows green on 1639c3a; final docs/screenshots commit verified before PU_DONE.
-- Working: every plan task. Pages live and 200; repo homepage set; github-pages env allows `upgrade/*` (remove after merge, see HANDOFF).
+- Working: every plan task. Pages live and 200; repo homepage set; pages.yml deploys from main only; github-pages env still allows `upgrade/*` until the coordinator removes it after merge.
 - Broken / open: no physical-device run with Shizuku yet.
 - Screenshots in site/screenshots come from Pages run 39726941883 (emulator, no Shizuku).
 
@@ -24,7 +24,9 @@ v1.1.0 on branch `upgrade/v1.1.0`: tests + coverage, safety (restore defaults, d
 - Core tests can be run locally without Gradle: compile `core/` + core tests with a standalone kotlinc 2.0.21 and run JUnit (about 0.5 GB heap).
 - Adding a constructor parameter after a lambda parameter steals the trailing-lambda slot; ChangeEngine's `access` sits before `policy` for that reason.
 - Gradle, Android builds and emulators never run on the shared dev box; every build/test signal comes from GitHub Actions.
-- `workflow_dispatch` only works for workflows on the default branch, so the Pages workflow also triggers on pushes to `upgrade/**`.
+- `workflow_dispatch` only works for workflows on the default branch; the one-time branch preview used a temporary `upgrade/**` push trigger, now removed.
+- CodeQL (Kotlin) flags comparisons on a `var` mutated inside a lambda as constant (`java/constant-comparison`); compute values with filter/sumOf instead of captured mutable locals.
 
 ## Session log (one line per session, append only)
 - 2026-10-22 05:25Z Claude Code/claude-opus-5-5: v1.1.0 built on upgrade/v1.1.0 (tests, access gate, restore, dry run, measured panel, CI gates, Pages, README); Audit crash found by CI screenshots and fixed; next: coordinator merge + tag v1.1.0, remove upgrade/* Pages policy.
+- 2026-10-22 Claude Code/claude-opus-5-5: coordinator review: fixed CodeQL alert #1 in DrainMeter.rate (no captured mutable vars), dropped upgrade/** Pages trigger, HANDOFF updated; next: coordinator merge + tag, remove upgrade/* env policy.

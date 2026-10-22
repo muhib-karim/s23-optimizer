@@ -30,20 +30,13 @@ object DrainMeter {
      */
     fun rate(samples: List<BatterySample>, from: Long? = null, until: Long? = null): DrainRate? {
         val ordered = samples.filter { (from == null || it.takenAt >= from) && (until == null || it.takenAt < until) }.sortedBy { it.takenAt }
-        var dropped = 0.0
-        var millis = 0L
-        var windows = 0
-        ordered.zipWithNext { a, b ->
-            val gap = b.takenAt - a.takenAt
-            if (a.discharging && b.discharging && gap in MIN_GAP_MS..MAX_GAP_MS && b.levelPct <= a.levelPct) {
-                dropped += a.levelPct - b.levelPct
-                millis += gap
-                windows++
-            }
+        val windows = ordered.zipWithNext().filter { (a, b) ->
+            a.discharging && b.discharging && (b.takenAt - a.takenAt) in MIN_GAP_MS..MAX_GAP_MS && b.levelPct <= a.levelPct
         }
+        val millis = windows.sumOf { (a, b) -> b.takenAt - a.takenAt }
         if (millis < MIN_TOTAL_MS) return null
         val hours = millis / 3_600_000.0
-        return DrainRate(dropped / hours, hours, windows)
+        return DrainRate(windows.sumOf { (a, b) -> a.levelPct - b.levelPct } / hours, hours, windows.size)
     }
 }
 

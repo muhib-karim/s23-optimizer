@@ -15,3 +15,4 @@ Status of the frozen acceptance checks. `[x]` = done with evidence; `[ ]` = open
 - 2026-10-22: 7aa30a2 green incl. first Pages run 39725810056. Its Audit screenshot showed the launcher: a v1.0.0 crash (Long/Int comparator, ClassCastException). Root cause reproduced in AppOrderTest, fixed in 2434351.
 - 2026-10-22: review fixes 1639c3a green on all four workflows (CI 39726941937, CodeQL, Secret scan, Pages 39726941883); screenshot job now asserts the app is in front.
 - 2026-10-22: Pages enabled (Actions), `upgrade/*` deployment policy added, repository homepage set; homepage returns 200.
+- 2026-10-22: coordinator review: CodeQL alert #1 (java/constant-comparison, core/Measured.kt:44) fixed in code; `upgrade/**` removed from the pages.yml trigger.

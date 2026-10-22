@@ -1,9 +1,9 @@
 name: Pages
 # Landing page with screenshots captured from the real debug build on an emulator.
-# upgrade/** branches deploy too so the site can be verified before the coordinator merges.
+# Deploys from main only; the github-pages environment does not accept other branches.
 on:
   push:
-    branches: [main, 'upgrade/**']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
