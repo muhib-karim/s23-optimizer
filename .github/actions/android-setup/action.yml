@@ -1,0 +1,18 @@
+name: Android build setup
+description: JDK 17, Gradle 8.10.2 and Android SDK 35 (shared by CI, CodeQL, Pages and Release).
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.10.2'
+    - uses: android-actions/setup-android@v3
+      with:
+        packages: 'platform-tools'
+    - name: Android 35 SDK
+      shell: bash
+      run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' > /dev/null

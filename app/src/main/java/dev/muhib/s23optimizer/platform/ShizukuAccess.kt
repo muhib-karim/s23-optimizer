@@ -89,9 +89,7 @@ class ShizukuShell(private val access: ShizukuAccess) : ShellRunner {
             }
         } catch (_: TimeoutCancellationException) {
             ShellResult(-1, "", "Shell command timed out after 12 seconds; state may be uncertain.")
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) { ShellResult(-1, "", "Shell unavailable: ${e.message}") }
-        finally { runCatching { process?.destroy() } }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { ShellResult(-1, "", "Shell unavailable: ${e.message}") } finally { runCatching { process?.destroy() } }
     }
 }
 

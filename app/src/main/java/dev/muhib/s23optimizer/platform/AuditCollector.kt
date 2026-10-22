@@ -24,6 +24,8 @@ class AuditCollector(private val context: Context, private val access: ShizukuAc
     private val mutex = Mutex()
     private var lastHeadroomRead: Long? = null
 
+    // One linear pass of independent, null-safe reads; splitting it would scatter the snapshot schema.
+    @Suppress("CyclomaticComplexMethod")
     suspend fun collect(role: String): AuditSnapshot = mutex.withLock { withContext(Dispatchers.IO) {
         val started = System.currentTimeMillis()
         val metrics = mutableListOf<Metric>()

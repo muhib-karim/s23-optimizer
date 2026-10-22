@@ -16,7 +16,7 @@ class AccessTest {
         var owner: Boolean = true,
         var crash: Boolean = false
     ) : ShizukuProbe {
-        private fun <T> guard(value: T): T { if (crash) error("binder died"); return value }
+        private fun <T> guard(value: T): T = value.also { check(!crash) { "binder died" } }
         override fun installed() = guard(installed)
         override fun running() = guard(running)
         override fun granted() = guard(granted)

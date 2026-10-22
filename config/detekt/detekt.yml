@@ -1,0 +1,45 @@
+# Built on detekt's default config (--build-upon-default-config). Only deviations are listed, each with its reason.
+# potential-bugs, coroutines, performance, exceptions (except the boundary rule below) and empty-blocks stay at defaults.
+
+style:
+  MaxLineLength:
+    active: false # formatting belongs to ktlint; the house style keeps guards and mappings on one line
+  WildcardImport:
+    active: false # each layer imports its own package wholesale (core.*, platform.*)
+  MagicNumber:
+    active: false # Android standby buckets, UID arithmetic and unit conversions are the domain; named in comments
+  ReturnCount:
+    max: 4
+    excludeGuardClauses: true
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+    excludes: ['**/test/**']
+
+exceptions:
+  TooGenericExceptionCaught:
+    # Boundaries (shell, journal, view model tasks) rethrow CancellationException and turn every other
+    # failure into a recorded, user-visible result instead of a crash.
+    active: false
+
+complexity:
+  CyclomaticComplexMethod:
+    threshold: 25
+    ignoreAnnotated: ['Composable']
+  LongMethod:
+    threshold: 120
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    functionThreshold: 9
+    constructorThreshold: 9
+    ignoreAnnotated: ['Composable']
+    ignoreDefaultParameters: true
+  ComplexCondition:
+    threshold: 6
+  NestedBlockDepth:
+    threshold: 6
+  TooManyFunctions:
+    thresholdInFiles: 25
+    thresholdInClasses: 25
+    thresholdInObjects: 15

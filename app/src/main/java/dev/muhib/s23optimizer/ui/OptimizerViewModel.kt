@@ -39,10 +39,7 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         if (busy.value) return
         busy.value = true
         viewModelScope.launch {
-            try { block() }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message.value = e.message ?: "Operation unavailable. No success is assumed." }
-            finally { busy.value = false }
+            try { block() } catch (e: CancellationException) { throw e } catch (e: Exception) { message.value = e.message ?: "Operation unavailable. No success is assumed." } finally { busy.value = false }
         }
     }
     fun audit(role: String) = task {

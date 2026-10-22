@@ -40,12 +40,13 @@ data class BatteryApp(val estimatedMah: Double? = null, val partialWakeMs: Long?
 data class BatteryStats(val apps: Map<Int, BatteryApp>, val window: String, val warnings: List<String>)
 
 object BatteryStatsParser {
-    private val uidToken = "(?:u\\d+a\\d+|u\\d+s\\d+|\\d+)"
+    private const val UID_TOKEN = "(?:u\\d+a\\d+|u\\d+s\\d+|\\d+)"
     private fun uid(text: String): Int? {
         text.toIntOrNull()?.let { return it }
         val m = Regex("u(\\d+)([as])(\\d+)").matchEntire(text) ?: return null
-        val user = m.groupValues[1].toLongOrNull() ?: return null
-        val app = m.groupValues[3].toLongOrNull() ?: return null
+        val user = m.groupValues[1].toLongOrNull()
+        val app = m.groupValues[3].toLongOrNull()
+        if (user == null || app == null) return null
         val result = user * 100_000L + app + if (m.groupValues[2] == "a") 10_000L else 0L
         return result.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
     }
@@ -55,8 +56,8 @@ object BatteryStatsParser {
         val warnings = mutableListOf<String>()
         var inPower = false
         var current: Int? = null
-        val estimate = Regex("^\\s*Uid ($uidToken): ([0-9]+(?:\\.[0-9]+)?)(?:\\s.*)?$")
-        val header = Regex("^\\s*($uidToken):\\s*$")
+        val estimate = Regex("^\\s*Uid ($UID_TOKEN): ([0-9]+(?:\\.[0-9]+)?)(?:\\s.*)?$")
+        val header = Regex("^\\s*($UID_TOKEN):\\s*$")
         text.lineSequence().forEach { line ->
             if (line.trim() == "Estimated power use (mAh):") { inPower = true; current = null }
             val e = if (inPower) estimate.matchEntire(line) else null

@@ -14,8 +14,7 @@ class BatterySampleWorker(context: Context, params: WorkerParameters) : Coroutin
         return try {
             graph.repository.save(graph.audit.batterySample())
             Result.success()
-        } catch (e: CancellationException) { throw e }
-        catch (_: Exception) { Result.failure() }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { Result.failure() }
     }
     companion object {
         const val PREF = "battery_samples"

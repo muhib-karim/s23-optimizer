@@ -72,11 +72,10 @@ object MeasuredValue {
         fun number(value: Double) = String.format(Locale.ROOT, "%.2f", value)
         appendLine("kind,phase,time_ms,value,unit,detail")
         for ((name, stats) in listOf("before" to panel.before, "after" to panel.after)) {
-            val drain = stats.drain
-            appendLine(if (drain == null) "summary,$name,,,%/h,not enough data"
-                else "summary,$name,,${number(drain.pctPerHour)},%/h,discharge over ${String.format(Locale.ROOT, "%.1f", drain.hours)} h in ${drain.windows} window(s)")
-            appendLine(if (stats.startMedianMs == null) "summary,$name,,,ms,no cold starts recorded"
-                else "summary,$name,,${stats.startMedianMs},ms,median cold start of ${stats.starts} launch(es)")
+            val drain = stats.drain?.let { "${number(it.pctPerHour)},%/h,discharge over ${String.format(Locale.ROOT, "%.1f", it.hours)} h in ${it.windows} window(s)" }
+            val start = stats.startMedianMs?.let { "$it,ms,median cold start of ${stats.starts} launch(es)" }
+            appendLine("summary,$name,,${drain ?: ",%/h,not enough data"}")
+            appendLine("summary,$name,,${start ?: ",ms,no cold starts recorded"}")
         }
         samples.sortedBy { it.takenAt }.forEach { appendLine("battery,${phaseOf(it.takenAt)},${it.takenAt},${number(it.levelPct)},%,${if (it.discharging) "discharging" else "not discharging"}") }
         starts.sortedBy { it.at }.forEach { appendLine("start,${phaseOf(it.at)},${it.at},${it.millis},ms,cold start") }

@@ -52,6 +52,7 @@ android {
         unitTests.isReturnDefaultValues = false
         // Robolectric needs merged resources and the manifest for the UI smoke test.
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 }
 

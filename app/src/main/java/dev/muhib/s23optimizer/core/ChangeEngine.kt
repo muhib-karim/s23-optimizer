@@ -32,9 +32,7 @@ class ChangeEngine(
     private val mutex = Mutex()
     // Checked before any shell read or journal write: no Shizuku means no command at all.
     private fun requireAccess() = access().let { check(it.ready) { it.message } }
-    private suspend fun <T> safely(block: suspend () -> T): Result<T> = try { Result.success(block()) }
-        catch (e: CancellationException) { throw e }
-        catch (e: Exception) { Result.failure(e) }
+    private suspend fun <T> safely(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
 
     suspend fun prepare(kind: ChangeKind, target: String, expected: String): Result<ReviewedChange> = safely {
         requireAccess()
@@ -69,8 +67,7 @@ class ChangeEngine(
             saved.copy(status = status, completedAt = System.currentTimeMillis(), detail =
                 "Exit ${output.exitCode}; observed ${verified ?: "unavailable"}. ${output.stderr.take(1200)} ${output.stdout.take(1200)}")
                 .also { journal.update(it) }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             saved.copy(status = JournalStatus.NEEDS_REVIEW, detail = "Interrupted: ${e.message}. Inspect or undo; state is uncertain.")
                 .also { journal.update(it) }
         }
@@ -97,8 +94,7 @@ class ChangeEngine(
             return entry.copy(status = if (restored) JournalStatus.UNDONE else JournalStatus.UNDO_FAILED,
                 completedAt = System.currentTimeMillis(), detail = if (restored) "Prior value verified: ${entry.before}" else "Undo pending; observed ${verified ?: "unavailable"}.")
                 .also { journal.update(it) }
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return entry.copy(status = JournalStatus.UNDO_FAILED, detail = "Undo pending: ${e.message}").also { journal.update(it) }
         }
     }

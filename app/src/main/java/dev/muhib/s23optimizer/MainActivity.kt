@@ -8,8 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.ViewModelProvider
 import dev.muhib.s23optimizer.ui.*
 
 class MainActivity : ComponentActivity() {
