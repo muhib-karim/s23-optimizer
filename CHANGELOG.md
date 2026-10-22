@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The format follows
 - **Restore defaults**: one tap undoes every pending journaled change, newest first, with a *Preview restore commands* dry run. Values changed by hand since stay untouched and pending.
 - **Dry run** in the confirm dialog: the exact read, apply, verify and undo commands for each change, copyable as text, before anything runs.
 - **Shizuku access states**: not installed, not running, permission needed, permission denied and unsupported mode, each with its own message and action button (Get Shizuku, Open Shizuku, Grant permission, Check again).
-- **Measured screen**: battery drain in %/h and this app's cold-start time, before vs after the first applied tweak, from on-device counters; optional hourly battery samples (off by default); **CSV export** with every raw sample.
+- **Measured screen**: battery drain in %/h and this app's cold-start time from on-device counters. After runs from the first tweak that took effect until a full restore; optional hourly battery samples (off by default, kept 30 days); **CSV export** with every raw sample.
 - Homepage on GitHub Pages with screenshots captured from the debug build on an emulator in CI, and an interactive, source-linked architecture diagram.
 - Tests: exact-argv tests for the Shizuku command builder, an end-to-end test per optimizer action against a modelled device, access-state and engine-gate tests, measurement and CSV tests, and a Robolectric UI smoke test. Coverage with Kover in CI.
 - CI gates: ktlint, detekt, CodeQL (java-kotlin), gitleaks (full history), Dependabot for Gradle and Actions.
@@ -27,7 +27,9 @@ All notable changes to this project are documented here. The format follows
 - versionName 1.1.0, versionCode 3 (code 2 belongs to the separate v2.0.0-alpha1 pre-release).
 
 ### Fixed
+- **Audit details crashed** (`ClassCastException`) when Usage access was granted and some apps had foreground time while others had none: the sort compared a `Long` with an `Int`. Found by the CI emulator screenshots; regression test `AppOrderTest`.
 - History no longer crashes on a journal row whose command cannot be rebuilt; it shows the record as not restorable automatically.
+- Restore defaults and per-row undo are disabled, with the Shizuku status and action shown, while Shizuku is not ready.
 
 ## [1.0.0] - 2026-10-17
 

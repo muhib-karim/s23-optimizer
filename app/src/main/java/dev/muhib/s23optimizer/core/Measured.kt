@@ -49,26 +49,43 @@ object DrainMeter {
 
 data class PhaseStats(val drain: DrainRate?, val startMedianMs: Long?, val starts: Int)
 
-data class MeasuredPanel(val pivot: Long?, val before: PhaseStats, val after: PhaseStats) {
+/** After = [start, end): from the first change that took effect until the last restore, or open while any change is still in effect. */
+data class MeasureWindow(val start: Long?, val end: Long?)
+
+data class MeasuredPanel(val window: MeasureWindow, val before: PhaseStats, val after: PhaseStats) {
+    val pivot: Long? get() = window.start
     val drainDelta: Double? get() = before.drain?.let { b -> after.drain?.let { it.pctPerHour - b.pctPerHour } }
     val startDeltaMs: Long? get() = before.startMedianMs?.let { b -> after.startMedianMs?.let { it - b } }
 }
 
 object MeasuredValue {
-    /** The first tweak still in effect splits before from after; failed or undone rows do not count. */
-    fun pivot(journal: List<JournalEntry>): Long? = journal.filter { it.status == JournalStatus.APPLIED }.minOfOrNull { it.createdAt }
+    private val tookEffect = setOf(JournalStatus.APPLIED, JournalStatus.NEEDS_REVIEW, JournalStatus.UNDO_FAILED, JournalStatus.UNDONE)
+    private val inEffect = setOf(JournalStatus.APPLIED, JournalStatus.NEEDS_REVIEW, JournalStatus.UNDO_FAILED)
 
-    fun build(samples: List<BatterySample>, starts: List<StartSample>, pivot: Long?): MeasuredPanel {
+    /** Failed and never-run rows are ignored; a full restore closes the window instead of erasing it. */
+    fun window(journal: List<JournalEntry>): MeasureWindow {
+        val start = journal.filter { it.status in tookEffect }.minOfOrNull { it.createdAt } ?: return MeasureWindow(null, null)
+        val end = if (journal.any { it.status in inEffect }) null else journal.filter { it.status == JournalStatus.UNDONE }.mapNotNull { it.completedAt }.maxOrNull()
+        return MeasureWindow(start, end)
+    }
+
+    fun build(samples: List<BatterySample>, starts: List<StartSample>, window: MeasureWindow): MeasuredPanel {
+        val pivot = window.start
         fun phase(from: Long?, until: Long?): PhaseStats {
             val times = starts.filter { (from == null || it.at >= from) && (until == null || it.at < until) }.map { it.millis }
             return PhaseStats(DrainMeter.rate(samples, from, until), median(times), times.size)
         }
-        val after = if (pivot == null) PhaseStats(null, null, 0) else phase(pivot, null)
-        return MeasuredPanel(pivot, phase(null, pivot), after)
+        val after = if (pivot == null) PhaseStats(null, null, 0) else phase(pivot, window.end)
+        return MeasuredPanel(window, phase(null, pivot), after)
     }
 
     fun csv(panel: MeasuredPanel, samples: List<BatterySample>, starts: List<StartSample>): String = buildString {
-        fun phaseOf(time: Long) = if (panel.pivot != null && time >= panel.pivot) "after" else "before"
+        val (start, end) = panel.window
+        fun phaseOf(time: Long) = when {
+            end != null && time >= end -> "restored"
+            start != null && time >= start -> "after"
+            else -> "before"
+        }
         fun number(value: Double) = String.format(Locale.ROOT, "%.2f", value)
         appendLine("kind,phase,time_ms,value,unit,detail")
         for ((name, stats) in listOf("before" to panel.before, "after" to panel.after)) {

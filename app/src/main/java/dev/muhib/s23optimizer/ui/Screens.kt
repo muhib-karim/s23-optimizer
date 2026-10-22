@@ -80,7 +80,7 @@ fun OptimizerApp(vm: OptimizerViewModel, export: () -> Unit, exportCsv: () -> Un
                 Screen.AUDIT -> AuditDetails(vm, snapshots.firstOrNull())
                 Screen.OPTIMISE -> Optimise(vm, snapshots.firstOrNull(), busy, access)
                 Screen.SETTINGS -> SamsungSettings(vm) { go(Screen.ABOUT) }
-                Screen.HISTORY -> History(vm, snapshots, journal, busy) { go(Screen.REPORT) }
+                Screen.HISTORY -> History(vm, snapshots, journal, busy, access) { go(Screen.REPORT) }
                 Screen.REPORT -> Report(vm, snapshots, busy, export)
                 Screen.ABOUT -> About()
                 Screen.MEASURED -> MeasuredScreen(vm, busy, exportCsv)
@@ -184,8 +184,7 @@ private fun AuditDetails(vm: OptimizerViewModel, snapshot: AuditSnapshot?) {
         Text("App observations", style = MaterialTheme.typography.headlineSmall)
         Note("Ordered by estimated UID drain where available, then foreground time. Estimates may repeat across packages sharing a UID. Foreground time is not energy. Missing data is never zero.")
         OutlinedTextField(value = search, onValueChange = { search = it; limit = 20 }, label = { Text("Search installed apps") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        val apps = snapshot.apps.filter { it.label.contains(search, true) || it.packageName.contains(search, true) }
-            .sortedWith(compareByDescending<AppProfile> { it.estimatedMah ?: -1.0 }.thenByDescending { it.foregroundMs ?: -1 })
+        val apps = AppOrder.byEvidence(snapshot.apps.filter { it.label.contains(search, true) || it.packageName.contains(search, true) })
         apps.take(limit).forEach { app ->
             Panel(app.label) {
                 SelectionContainer { Note("${app.packageName} · UID ${app.uid}") }
@@ -314,12 +313,13 @@ private fun SamsungSettings(vm: OptimizerViewModel, about: () -> Unit) {
 }
 
 @Composable
-private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, journal: List<JournalEntry>, busy: Boolean, report: () -> Unit) {
+private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, journal: List<JournalEntry>, busy: Boolean, access: ShellAccess, report: () -> Unit) {
     var preview by remember { mutableStateOf<String?>(null) }
     val pending = UndoPlanner.pending(journal)
     Page {
         Text("A record of every change", style = MaterialTheme.typography.headlineMedium)
-        Button(onClick = vm::restoreDefaults, enabled = !busy && pending.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Restore defaults") }
+        if (pending.isNotEmpty() && !access.ready) AccessPanel(vm, access, "Restore needs Shizuku to read and write the settings. Your journal is kept until then.")
+        Button(onClick = vm::restoreDefaults, enabled = !busy && access.ready && pending.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Restore defaults") }
         Note(if (pending.isEmpty()) "Nothing to restore: no pending changes." else "${pending.size} change(s) pending. One tap writes back every saved value, newest first. A value you changed by hand since is left untouched and stays pending.")
         OutlinedButton(onClick = { preview = vm.restorePreview() }, enabled = pending.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Preview restore commands") }
         if (journal.isEmpty()) Text("No changes have been journaled.")
@@ -328,7 +328,7 @@ private fun History(vm: OptimizerViewModel, snapshots: List<AuditSnapshot>, jour
                 Text(row.target); Note(date(row.createdAt)); Text("${row.before} → ${row.expected}"); Note(row.detail)
                 Note("Original command:"); Command(runCatching { Commands.apply(row.kind, row.target, row.expected).display }.getOrDefault("unavailable for this record"))
                 Note("Restore:"); runCatching { Commands.undo(row) }.getOrDefault(emptyList()).forEach { Command(it.display) }
-                Button(onClick = { vm.undo(row.id) }, enabled = !busy && row.status != JournalStatus.UNDONE) { Text("Undo / retry this change") }
+                Button(onClick = { vm.undo(row.id) }, enabled = !busy && access.ready && row.status != JournalStatus.UNDONE) { Text("Undo / retry this change") }
             }
         }
         Text("Saved snapshots", style = MaterialTheme.typography.headlineSmall)

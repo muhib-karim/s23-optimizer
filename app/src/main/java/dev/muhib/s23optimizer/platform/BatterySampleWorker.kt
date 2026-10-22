@@ -12,7 +12,7 @@ class BatterySampleWorker(context: Context, params: WorkerParameters) : Coroutin
         val graph = (applicationContext as OptimizerApplication).graph
         if (!graph.preferences.getBoolean(PREF, false)) return Result.success()
         return try {
-            graph.repository.save(graph.audit.batterySample())
+            graph.repository.saveSample(graph.audit.batterySample())
             Result.success()
         } catch (e: CancellationException) { throw e } catch (_: Exception) { Result.failure() }
     }

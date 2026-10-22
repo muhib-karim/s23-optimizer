@@ -19,7 +19,7 @@ S23 Optimizer is an Android app that audits a Samsung Galaxy S23 Ultra (or any A
 
 ## Screenshots
 
-Captured by GitHub Actions from the debug build on an Android 14 emulator (Pixel 7 profile, `.github/workflows/pages.yml`). The emulator has no Shizuku, so every change control shows its locked state and says why.
+Captured by GitHub Actions from the debug build on an Android 14 emulator (Pixel 7 profile, `.github/workflows/pages.yml`). The emulator has no Shizuku, so every change control shows its locked state and says why. Before the audit, the script set the emulator battery to 78% / discharging and granted Usage access; every number shown is what the app read from that emulator.
 
 | Dashboard | Optimise (no Shizuku) | Measured | History / Restore |
 |---|---|---|---|
@@ -55,7 +55,7 @@ Read-only commands the app may run: `dumpsys batterystats --charged`, `dumpsys p
 |---|---|
 | **Battery drain, %/h**: Android's battery level (`ACTION_BATTERY_CHANGED`) stored with each audit and, if you switch it on, an hourly battery sample. Only pairs that are both *Discharging*, 5 min–12 h apart and with no level rise count; at least 1 h is required. | A battery-life gain for your phone. Use, signal and temperature differ between days; the panel shows an observation, not a cause. |
 | **App start time**: this app's own cold start, process start → first drawn frame, last 50 launches. | The launch speed of other apps. Cold start is a responsiveness proxy, not a benchmark. |
-| **Before vs after** is split at the first tweak that is still applied; windows crossing it count on neither side. | Exact per-app energy. batterystats numbers are per-UID estimates that packages can share. |
+| **Before vs after**: After starts at the first tweak that took effect and ends at your restore once nothing is still applied; windows crossing either edge count on neither side. | Exact per-app energy. batterystats numbers are per-UID estimates that packages can share. |
 | Audit readings with their source (see *What it does*). | Battery health %, private per-app storage, anything unreadable (shown as *unavailable*, never 0). |
 
 Export the panel from **Measured → Export CSV**: summary rows plus every raw battery sample and cold start, each labelled `before` or `after`.
@@ -129,9 +129,9 @@ Builds and tests run only on Actions. Locally you need JDK 17 and Android SDK 35
 
 **Does it need root?** No. Shizuku runs commands as the shell user (uid 2000) through Wireless debugging. Root mode is deliberately unsupported.
 
-**What happens without Shizuku?** The audit still runs with less detail; every change button stays disabled with the reason and the next step (get, open, grant).
+**What happens without Shizuku?** The audit still runs with less detail; every change, undo and restore button stays disabled with the reason and the next step (get, open, grant). The journal is kept until Shizuku is back.
 
-**Can a tweak break my phone?** The list is four tweaks with exact undos, sensitive app categories are excluded, and disabling is limited to seven named packages behind an opt-in. Restore defaults puts back every journaled value.
+**Can a tweak break my phone?** The list is four tweaks with exact undos, sensitive app categories are excluded, and disabling is limited to seven named packages behind an opt-in. Restore defaults puts back every journaled value, except one you have since changed by hand, which it leaves alone and keeps pending.
 
 **What if I changed a setting myself after the app did?** Restore sees a value that is neither the saved nor the requested one, leaves it untouched and keeps the record pending.
 

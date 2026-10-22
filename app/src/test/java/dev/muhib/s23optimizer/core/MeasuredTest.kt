@@ -49,7 +49,7 @@ class MeasuredTest {
 
     @Test fun `window straddling the first tweak counts on neither side`() {
         val samples = listOf(discharging(0.0, 80.0), discharging(5.0, 75.0), discharging(10.0, 70.0))
-        val panel = MeasuredValue.build(samples, emptyList(), pivot = t0 + 6 * hour)
+        val panel = MeasuredValue.build(samples, emptyList(), MeasureWindow(t0 + 6 * hour, null))
         assertEquals(1.0, panel.before.drain!!.pctPerHour, 1e-9)
         assertEquals(5.0, panel.before.drain!!.hours, 1e-9)
         assertNull(panel.after.drain)
@@ -59,7 +59,7 @@ class MeasuredTest {
     @Test fun `before and after deltas use only measured phases`() {
         val samples = listOf(discharging(0.0, 90.0), discharging(4.0, 82.0), discharging(10.0, 80.0), discharging(14.0, 76.0))
         val starts = listOf(StartSample(t0 + hour, 500), StartSample(t0 + 2 * hour, 300), StartSample(t0 + 3 * hour, 400), StartSample(t0 + 11 * hour, 350), StartSample(t0 + 12 * hour, 250))
-        val panel = MeasuredValue.build(samples, starts, pivot = t0 + 9 * hour)
+        val panel = MeasuredValue.build(samples, starts, MeasureWindow(t0 + 9 * hour, null))
         assertEquals(2.0, panel.before.drain!!.pctPerHour, 1e-9)
         assertEquals(1.0, panel.after.drain!!.pctPerHour, 1e-9)
         assertEquals(-1.0, panel.drainDelta!!, 1e-9)
@@ -70,7 +70,7 @@ class MeasuredTest {
     }
 
     @Test fun `without an applied tweak everything is baseline`() {
-        val panel = MeasuredValue.build(listOf(discharging(0.0, 80.0), discharging(2.0, 78.0)), listOf(StartSample(t0, 420)), pivot = null)
+        val panel = MeasuredValue.build(listOf(discharging(0.0, 80.0), discharging(2.0, 78.0)), listOf(StartSample(t0, 420)), MeasureWindow(null, null))
         assertEquals(1.0, panel.before.drain!!.pctPerHour, 1e-9)
         assertEquals(420L, panel.before.startMedianMs)
         assertNull(panel.after.drain)
@@ -79,11 +79,33 @@ class MeasuredTest {
         assertNull(panel.startDeltaMs)
     }
 
-    @Test fun `pivot is the earliest change still applied`() {
-        fun row(id: Long, at: Long, status: JournalStatus) = JournalEntry(id = id, createdAt = at, kind = ChangeKind.APP_OP, target = "org.example.reader", before = "allow", expected = "ignore", status = status)
-        assertEquals(30L, MeasuredValue.pivot(listOf(row(1, 10, JournalStatus.UNDONE), row(2, 20, JournalStatus.FAILED), row(3, 30, JournalStatus.APPLIED), row(4, 40, JournalStatus.APPLIED))))
-        assertNull(MeasuredValue.pivot(listOf(row(1, 10, JournalStatus.UNDONE), row(2, 20, JournalStatus.PREPARED))))
-        assertNull(MeasuredValue.pivot(emptyList()))
+    private fun row(id: Long, at: Long, status: JournalStatus, done: Long? = null) = JournalEntry(id = id, createdAt = at, kind = ChangeKind.APP_OP,
+        target = "org.example.reader", before = "allow", expected = "ignore", status = status, completedAt = done)
+
+    @Test fun `window starts at the first change that took effect and stays open while one is in effect`() {
+        assertEquals(MeasureWindow(10, null), MeasuredValue.window(listOf(row(1, 10, JournalStatus.UNDONE, 50), row(2, 20, JournalStatus.FAILED), row(3, 30, JournalStatus.APPLIED))))
+        assertEquals(MeasureWindow(10, null), MeasuredValue.window(listOf(row(1, 10, JournalStatus.UNDONE, 50), row(2, 30, JournalStatus.UNDO_FAILED))))
+        assertEquals(MeasureWindow(30, null), MeasuredValue.window(listOf(row(1, 20, JournalStatus.FAILED), row(2, 30, JournalStatus.NEEDS_REVIEW))))
+    }
+
+    @Test fun `restoring everything closes the window at the last restore instead of erasing it`() {
+        assertEquals(MeasureWindow(10, 70), MeasuredValue.window(listOf(row(1, 10, JournalStatus.UNDONE, 50), row(2, 30, JournalStatus.UNDONE, 70))))
+    }
+
+    @Test fun `no change that took effect means no window`() {
+        assertEquals(MeasureWindow(null, null), MeasuredValue.window(listOf(row(1, 10, JournalStatus.FAILED), row(2, 20, JournalStatus.PREPARED))))
+        assertEquals(MeasureWindow(null, null), MeasuredValue.window(emptyList()))
+    }
+
+    @Test fun `samples after a restore count as neither before nor after`() {
+        val samples = listOf(discharging(0.0, 90.0), discharging(2.0, 88.0), discharging(3.0, 86.0), discharging(5.0, 82.0), discharging(6.0, 81.0), discharging(9.0, 60.0))
+        val panel = MeasuredValue.build(samples, listOf(StartSample(t0 + 8 * hour, 999)), MeasureWindow(t0 + (2.5 * hour).toLong(), t0 + (6.5 * hour).toLong()))
+        assertEquals(1.0, panel.before.drain!!.pctPerHour, 1e-9)
+        assertEquals(5.0 / 3.0, panel.after.drain!!.pctPerHour, 1e-9)
+        assertEquals(0, panel.after.starts)
+        val csv = MeasuredValue.csv(panel, samples, listOf(StartSample(t0 + 8 * hour, 999))).lines()
+        assertTrue(csv.contains("battery,restored,${t0 + 9 * hour},60.00,%,discharging"))
+        assertTrue(csv.contains("start,restored,${t0 + 8 * hour},999,ms,cold start"))
     }
 
     @Test fun `battery sample comes from a snapshot only when level is measured`() {
@@ -100,7 +122,7 @@ class MeasuredTest {
     @Test fun `csv export has a header summary rows and every raw sample`() {
         val samples = listOf(discharging(0.0, 80.0), discharging(10.0, 70.0))
         val starts = listOf(StartSample(t0 + 11 * hour, 410))
-        val panel = MeasuredValue.build(samples, starts, pivot = t0 + (10.5 * hour).toLong())
+        val panel = MeasuredValue.build(samples, starts, MeasureWindow(t0 + (10.5 * hour).toLong(), null))
         val lines = MeasuredValue.csv(panel, samples, starts).lines()
         assertEquals("kind,phase,time_ms,value,unit,detail", lines.first())
         assertTrue(lines.contains("summary,before,,1.00,%/h,discharge over 10.0 h in 1 window(s)"))

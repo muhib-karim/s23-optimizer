@@ -24,8 +24,12 @@ internal fun MeasuredScreen(vm: OptimizerViewModel, busy: Boolean, exportCsv: ()
     fun signed(value: Double) = String.format(Locale.getDefault(), "%+.2f", value)
     Page {
         Text("Before / after, measured on this phone", style = MaterialTheme.typography.headlineMedium)
-        Note(panel.pivot?.let { "Split at your first applied tweak (${date(it)}). Windows that cross it are not counted." }
-            ?: "No tweak is applied yet, so every measurement counts as the baseline (Before).")
+        val (start, end) = panel.window
+        Note(when {
+            start == null -> "No tweak is applied yet, so every measurement counts as the baseline (Before)."
+            end == null -> "Before ends at your first applied tweak (${date(start)}); After runs from then on. Windows that cross it are not counted."
+            else -> "After runs from your first applied tweak (${date(start)}) to your restore (${date(end)}). Later samples count on neither side."
+        })
         Panel("Battery drain") {
             Phase("Before", panel.before) { stats -> stats.drain?.let { "${number(it.pctPerHour)} %/h over ${number(it.hours)} h (${it.windows} window(s))" } }
             Phase("After", panel.after) { stats -> stats.drain?.let { "${number(it.pctPerHour)} %/h over ${number(it.hours)} h (${it.windows} window(s))" } }

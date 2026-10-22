@@ -14,7 +14,7 @@ class StartupTimer(private val prefs: SharedPreferences) {
     fun record(sample: StartSample) { prefs.edit().putString(KEY, StartLog.append(prefs.getString(KEY, "").orEmpty(), sample)).apply() }
 
     /** Call from the launcher activity's onCreate. Records at most once per process, and only for a launch-started process. */
-    fun attach(activity: Activity, restored: Boolean) {
+    fun attach(activity: Activity, restored: Boolean, onRecorded: () -> Unit = {}) {
         if (restored || measured) return
         measured = true
         // A process started earlier for background work is not a cold launch.
@@ -26,6 +26,7 @@ class StartupTimer(private val prefs: SharedPreferences) {
                 if (done) return
                 done = true
                 record(StartSample(System.currentTimeMillis(), SystemClock.uptimeMillis() - Process.getStartUptimeMillis()))
+                onRecorded()
                 // Listeners cannot be removed during dispatch.
                 decor.post { decor.viewTreeObserver.removeOnDrawListener(this) }
             }

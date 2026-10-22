@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         model = ViewModelProvider(this)[OptimizerViewModel::class.java]
-        model.graph.startTimer.attach(this, restored = savedInstanceState != null)
+        model.graph.startTimer.attach(this, restored = savedInstanceState != null, onRecorded = model::refreshStarts)
         // Debug builds only: CI opens each screen directly to capture landing-page screenshots.
         val initialScreen = if (BuildConfig.DEBUG) intent.getStringExtra("screen") else null
         if (BuildConfig.DEBUG && savedInstanceState == null && intent.getBooleanExtra("autoAudit", false)) model.audit("BEFORE")

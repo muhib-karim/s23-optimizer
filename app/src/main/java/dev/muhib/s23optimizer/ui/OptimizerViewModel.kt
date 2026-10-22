@@ -17,13 +17,13 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
     val graph = (application as OptimizerApplication).graph
     val snapshots = graph.repository.snapshots.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     /** Audits only; hourly battery SAMPLE rows feed the Measured panel, not History or the pickers. */
-    val audits = graph.repository.snapshots.map { rows -> rows.filter { it.role != AuditCollector.SAMPLE } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val audits = snapshots.map { rows -> rows.filter { it.role != AuditCollector.SAMPLE } }
+        .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val journal = graph.journal.flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val starts = MutableStateFlow(graph.startTimer.samples())
     val measured = combine(snapshots, journal, starts) { rows, entries, startList ->
-        MeasuredValue.build(rows.mapNotNull(BatterySample::from), startList, MeasuredValue.pivot(entries))
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MeasuredValue.build(emptyList(), emptyList(), null))
+        MeasuredValue.build(rows.mapNotNull(BatterySample::from), startList, MeasuredValue.window(entries))
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MeasuredValue.build(emptyList(), emptyList(), MeasureWindow(null, null)))
     val batterySamples = MutableStateFlow(graph.preferences.getBoolean(BatterySampleWorker.PREF, false))
     val access = graph.access.state
     val busy = MutableStateFlow(false)
@@ -97,7 +97,7 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun restorePreview(): String = DryRun.render(DryRun.restore(journal.value))
     fun refreshStarts() { starts.value = graph.startTimer.samples() }
     fun sampleBattery() = task {
-        graph.repository.save(graph.audit.batterySample())
+        graph.repository.saveSample(graph.audit.batterySample())
         message.value = "Battery sample saved."
     }
     fun setBatterySamples(value: Boolean) {
@@ -110,7 +110,7 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         if (uri == null) return
         task {
             val rows = snapshots.value.mapNotNull(BatterySample::from)
-            val text = MeasuredValue.csv(MeasuredValue.build(rows, starts.value, MeasuredValue.pivot(journal.value)), rows, starts.value)
+            val text = MeasuredValue.csv(MeasuredValue.build(rows, starts.value, MeasuredValue.window(journal.value)), rows, starts.value)
             withContext(Dispatchers.IO) {
                 requireNotNull(graph.app.contentResolver.openOutputStream(uri, "wt")) { "Cannot open selected document." }.use { it.write(text.toByteArray()) }
             }
