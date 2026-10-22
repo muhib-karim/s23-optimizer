@@ -20,9 +20,9 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/android-setup
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: java-kotlin
           build-mode: manual
@@ -30,6 +30,6 @@ jobs:
       - name: Build for CodeQL
         # The Kotlin extractor needs a real, in-process compile: no build cache, no Kotlin daemon.
         run: gradle --no-daemon --no-build-cache -Pkotlin.compiler.execution.strategy=in-process assembleDebug
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:java-kotlin
