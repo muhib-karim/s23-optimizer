@@ -110,7 +110,7 @@ flowchart LR
 
 - **Pure JVM tests** (`app/src/test/.../core`): exact argv for every command, every optimizer action end to end against a modelled device (`DeviceShell`: appops, standby, pm, settings), conflicts, restore order, dry run, all six access states and the engine gate, drain/start-time maths and CSV, parsers, eligibility, scoring.
 - **Robolectric UI smoke test** (`ui/AppSmokeTest.kt`): launches `MainActivity` with no Shizuku and walks onboarding → dashboard → Optimise (locked) → History (Restore disabled) → Measured.
-- **Coverage**: Kover XML/HTML in every CI run (artifact `test-and-coverage-reports`, table in the job summary). On the first v1.1.0 run: 71 tests, `core` 98.7 % lines, whole app 47.2 % lines (Android adapters are exercised on devices, not on the JVM).
+- **Coverage**: Kover XML/HTML in every CI run (artifact `test-and-coverage-reports`, table in the job summary). CI run 39726941937 (2026-10-22): 76 tests, 0 failures; `core` 98.5 % lines / 80.9 % branches, whole app 47.6 % lines (Android adapters are exercised on devices, not on the JVM).
 
 ## CI on GitHub Actions
 
